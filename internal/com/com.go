@@ -149,8 +149,6 @@ var (
 	modcombase = windows.NewLazySystemDLL("combase.dll")
 
 	procCoCreateInstance          = modole32.NewProc("CoCreateInstance")
-	procCoInitializeEx            = modole32.NewProc("CoInitializeEx")
-	procCoUninitialize            = modole32.NewProc("CoUninitialize")
 	procRoInitialize              = modcombase.NewProc("RoInitialize")
 	procRoUninitialize            = modcombase.NewProc("RoUninitialize")
 	procRoGetActivationFactory    = modcombase.NewProc("RoGetActivationFactory")

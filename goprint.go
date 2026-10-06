@@ -82,7 +82,12 @@ func Print(ctx context.Context, doc Document, s Settings) (*Job, error) {
 	if err := s.validate(); err != nil {
 		return nil, err
 	}
-	return platform.print(ctx, doc, s)
+	src, err := doc.open()
+	if err != nil {
+		return nil, err
+	}
+	defer src.Close()
+	return platform.print(ctx, src, doc, s)
 }
 
 // DialogStyle selects the native dialog on platforms that offer several.

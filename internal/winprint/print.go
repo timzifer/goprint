@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"runtime"
 	"strconv"
 	"sync"
 	"time"
@@ -128,6 +129,43 @@ type Job struct {
 
 	mu       sync.Mutex
 	canceled bool
+	res      *resources // released when the job reaches a final state
+}
+
+// resources holds COM references a job keeps until it is final. release
+// is idempotent, so the explicit path and the cleanup safety net can race.
+type resources struct {
+	mu   sync.Mutex
+	held []*com.Unknown
+}
+
+func (r *resources) keep(u *com.Unknown) {
+	r.mu.Lock()
+	r.held = append(r.held, u)
+	r.mu.Unlock()
+}
+
+func (r *resources) release() {
+	r.mu.Lock()
+	held := r.held
+	r.held = nil
+	r.mu.Unlock()
+	if len(held) > 0 {
+		releaseOnApartment(held)
+	}
+}
+
+func releaseOnApartment(held []*com.Unknown) {
+	a, err := apartment()
+	if err != nil {
+		return
+	}
+	_ = a.Do(context.Background(), func() error {
+		for _, u := range held {
+			u.Release()
+		}
+		return nil
+	})
 }
 
 // PagesClipped reports whether page ranges reached beyond the document.
@@ -178,11 +216,15 @@ func Print(ctx context.Context, src io.Reader, opts Options) (*Job, error) {
 	if err != nil {
 		return nil, err
 	}
-	job := &Job{printer: opts.Printer, sink: &statusSink{update: make(chan struct{}, 1)}}
+	job := &Job{printer: opts.Printer, sink: &statusSink{update: make(chan struct{}, 1)}, res: &resources{}}
 	err = a.Do(ctx, func() error { return job.spool(ctx, src, opts) })
 	if err != nil {
+		job.res.release()
 		return nil, err
 	}
+	// Safety net for jobs nobody waits on: release held streams (closing an
+	// output file) when the Job becomes unreachable.
+	runtime.AddCleanup(job, (*resources).release, job.res)
 	return job, nil
 }
 
@@ -213,7 +255,9 @@ func (j *Job) spool(ctx context.Context, src io.Reader, opts Options) error {
 		if output, err = com.NewFileStream(opts.OutputFile, com.STGM_WRITE|com.STGM_CREATE|com.STGM_SHARE_DENY_WRITE, true); err != nil {
 			return err
 		}
-		defer output.Release()
+		// The spooler writes the printer output through this stream while the
+		// job is processed, after spool returns; the job owns it from here.
+		j.res.keep(&output.Unknown)
 	}
 
 	factory, err := com.CreateInstance(&clsidPrintDocumentPackageTargetFactory, &iidIPrintDocumentPackageTargetFactory, com.CLSCTX_INPROC_SERVER)
@@ -361,6 +405,14 @@ func (j *Job) spoolerID() uint32 {
 // State reports the job state, combining the package status and the
 // spooler queue.
 func (j *Job) State(ctx context.Context) (State, error) {
+	st, err := j.state(ctx)
+	if err == nil && st >= StateCompleted {
+		j.res.release()
+	}
+	return st, err
+}
+
+func (j *Job) state(ctx context.Context) (State, error) {
 	j.mu.Lock()
 	canceled, closed := j.canceled, j.closed
 	j.mu.Unlock()

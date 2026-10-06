@@ -5,7 +5,9 @@ package goprint
 import (
 	"context"
 	"fmt"
+	"io"
 
+	"github.com/timzifer/goprint/internal/core"
 	"github.com/timzifer/goprint/internal/winprint"
 )
 
@@ -36,21 +38,16 @@ func (windowsBackend) capabilities(context.Context, string) (Capabilities, error
 	return Capabilities{}, fmt.Errorf("%w: capabilities on windows (not yet implemented)", ErrUnsupported)
 }
 
-func (windowsBackend) print(ctx context.Context, doc Document, s Settings) (*Job, error) {
+func (windowsBackend) print(ctx context.Context, src io.Reader, doc Document, s Settings) (*Job, error) {
 	warnings := windowsUnmapped(s)
 	if s.Strict && len(warnings) > 0 {
 		return nil, fmt.Errorf("%w: %s", ErrUnsupported, warnings[0])
 	}
-	src, err := doc.open()
-	if err != nil {
-		return nil, err
-	}
-	defer src.Close()
 	j, err := winprint.Print(ctx, src, winprint.Options{
 		Printer:    s.Printer,
 		Title:      doc.Title,
 		OutputFile: s.Vendor[VendorOutputFile],
-		PageRanges: s.corePageRanges(),
+		PageRanges: corePageRanges(s.PageRanges),
 	})
 	if err != nil {
 		return nil, err
@@ -64,6 +61,14 @@ func (windowsBackend) print(ctx context.Context, doc Document, s Settings) (*Job
 func (windowsBackend) dialog(context.Context, Document, DialogOptions) (*Job, Settings, error) {
 	// TODO(phase 1b/3): modern dialog with preview, classic PrintDlgEx.
 	return nil, Settings{}, fmt.Errorf("%w: dialogs on windows are not implemented yet", ErrNoDialog)
+}
+
+func corePageRanges(rs []PageRange) []core.PageRange {
+	var out []core.PageRange
+	for _, r := range rs {
+		out = append(out, core.PageRange{From: r.From, To: r.To})
+	}
+	return out
 }
 
 // windowsUnmapped reports settings the Windows backend does not apply yet.

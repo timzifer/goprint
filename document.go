@@ -19,11 +19,3 @@ func (d Document) open() (io.ReadCloser, error) {
 	}
 	return io.NopCloser(bytes.NewReader(b)), nil
 }
-
-func (s Settings) corePageRanges() []core.PageRange {
-	var r []core.PageRange
-	for _, p := range s.PageRanges {
-		r = append(r, core.PageRange{From: p.From, To: p.To})
-	}
-	return r
-}
