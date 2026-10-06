@@ -21,7 +21,7 @@ func TestParseMediaInvalid(t *testing.T) {
 	for _, name := range []string{
 		"", "a4", "iso_a4", "a4_210x297mm", "iso_a4_210x297cm", "iso_a4_210mm",
 		"iso_a4_0x297mm", "iso_a4_-1x297mm", "iso_a4_axbmm", "_x_1x1mm", "iso__1x1mm",
-		"iso_a4_NaNx1mm", "iso_a4_1xInfmm", "iso_a4_1e6x1mm",
+		"iso_a4_NaNx1mm", "iso_a4_1xInfmm", "iso_a4_1e6x1mm", "0_0_1e-7x1mm",
 	} {
 		if _, err := ParseMedia(name); !errors.Is(err, ErrInvalid) {
 			t.Errorf("ParseMedia(%q) err = %v, want ErrInvalid", name, err)

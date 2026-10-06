@@ -49,7 +49,11 @@ func ParseMedia(name string) (Media, error) {
 	if err1 != nil || err2 != nil || !(w > 0 && w <= 1e5) || !(h > 0 && h <= 1e5) {
 		return Media{}, invalidf("media: invalid dimensions in %q", name)
 	}
-	return Media{Name: name, Width: int(w*unit + 0.5), Height: int(h*unit + 0.5)}, nil
+	m := Media{Name: name, Width: int(w*unit + 0.5), Height: int(h*unit + 0.5)}
+	if m.Width < 1 || m.Height < 1 {
+		return Media{}, invalidf("media: dimensions below 1µm in %q", name)
+	}
+	return m, nil
 }
 
 func (m Media) String() string {
