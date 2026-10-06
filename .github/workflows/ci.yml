@@ -185,10 +185,29 @@ jobs:
           GOPRINT_PORTAL_TEST: "1"
         run: go test -count=1 -v -run 'Portal' .
 
+  macos-dialog:
+    # The print panel itself needs a user; these tests run the dialog's
+    # PDFKit print operation without panel as a save-to-PDF job (on the
+    # main thread via RunMain) and check the PDFs it writes. They also run
+    # in the test matrix; this job shows the details and covers Intel.
+    name: macOS dialog (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+      - name: Test print operation
+        run: go test -count=1 -v -run 'Mac|OnMain|RunMain|PrintToFile' . ./internal/macprint
+
   # Single required status check for branch protection.
   ci-ok:
     if: always()
-    needs: [test, coverage, lint, cross-compile, integration-cups, integration-portal]
+    needs: [test, coverage, lint, cross-compile, integration-cups, integration-portal, macos-dialog]
     runs-on: ubuntu-latest
     steps:
       - name: All jobs succeeded

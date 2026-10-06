@@ -25,7 +25,7 @@ headless or through the native print dialog.
 > | `Printers`, `GetCapabilities` | ✓ (CUPS) | ✓ (CUPS) | ✓ |
 > | `Print` (headless) | ✓ all settings via IPP | ✓ all settings via IPP | ✓ amd64/386, all settings via DEVMODE/PrintTicket |
 > | IPP Everywhere printer by URI (`Printer: "ipp://…"`) | ✓ | ✓ | ✓ |
-> | `Dialog` | ✓ desktop dialog via xdg-desktop-portal (presets + result; no job tracking) | – | ✓ amd64/386: modern dialog with live preview and page selection; classic `PrintDlgEx` for settings-only use |
+> | `Dialog` | ✓ desktop dialog via xdg-desktop-portal (presets + result; no job tracking) | ✓ print panel with PDFKit preview; bare panel (no preview) for `PrintNow == false` | ✓ amd64/386: modern dialog with live preview and page selection; classic `PrintDlgEx` for settings-only use |
 >
 > Unimplemented parts return `ErrUnsupported` / `ErrNoDialog`.
 
@@ -79,6 +79,31 @@ job and so never asks print-to-file printers for a file name.
 On Windows, `Settings.Vendor[goprint.VendorOutputFile]` writes the printer
 output to a file instead of the device, e.g. to get a PDF from
 "Microsoft Print to PDF" without its save dialog.
+
+### macOS: main thread
+
+AppKit runs only on the main thread. Lock the main goroutine to it in an
+`init` of package `main` and run your program through `goprint.RunMain`;
+`Dialog` may then be called from any goroutine inside it (or directly from
+the main goroutine). Called from another thread without `RunMain`, `Dialog`
+returns `ErrWrongThread`. Programs with their own Cocoa event loop call
+`Dialog` on that thread. `RunMain` just calls `f` on other platforms.
+
+```go
+func init() { runtime.LockOSThread() }
+
+func main() {
+	goprint.RunMain(func() {
+		job, chosen, err := goprint.Dialog(ctx, doc, goprint.DialogOptions{PrintNow: true})
+		// ...
+	})
+}
+```
+
+The panel is app-modal (`DialogOptions.Owner` is not used for a sheet
+yet) and takes a single page range. A job printed from the panel is found
+in CUPS by name; if the user saves a PDF or opens Preview instead, the
+returned `Job` cannot be tracked and reports completed.
 
 ## Platforms
 
