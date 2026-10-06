@@ -30,12 +30,18 @@ jobs:
         with:
           go-version: ${{ matrix.go }}
       - name: Test
-        run: go test -count=1 -shuffle=on ./...
+        shell: bash
+        # Hosted Windows runners lose the print-to-file output of
+        # "Microsoft Print to PDF" jobs sent concurrently by separate
+        # processes (goprint reports this as ErrOutputMissing). Packages that
+        # print therefore run one at a time there.
+        run: go test -count=1 -shuffle=on ${{ runner.os == 'Windows' && '-p 1' || '' }} ./...
       - name: Test (race)
         # The race detector needs cgo.
         env:
           CGO_ENABLED: "1"
-        run: go test -count=1 -race ./...
+        shell: bash
+        run: go test -count=1 -race ${{ runner.os == 'Windows' && '-p 1' || '' }} ./...
       - name: Fuzz smoke
         # Native fuzzing is unreliable on Windows runners (spurious
         # "context deadline exceeded"); seed corpora still run there via go test.
