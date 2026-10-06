@@ -54,6 +54,15 @@ type Options struct {
 	RasterDPI float32
 }
 
+// Tracef, if set, receives internal progress messages (tests, debugging).
+var Tracef func(format string, args ...any)
+
+func tracef(format string, args ...any) {
+	if f := Tracef; f != nil {
+		f(format, args...)
+	}
+}
+
 // jobIDTimeout bounds how long State waits for package events (job id,
 // completion) after the package was closed before trusting the queue alone.
 const jobIDTimeout = 30 * time.Second
@@ -86,6 +95,7 @@ type statusSink struct {
 }
 
 func (s *statusSink) set(st packageStatus) {
+	tracef("package status %+v", st)
 	s.mu.Lock()
 	s.last, s.seen = st, true
 	s.mu.Unlock()
@@ -327,6 +337,7 @@ func (j *Job) spool(ctx context.Context, src io.Reader, opts Options) error {
 	}
 	j.mu.Lock()
 	j.closedAt = time.Now()
+	tracef("package closed")
 	j.mu.Unlock()
 	return nil
 }
@@ -455,6 +466,7 @@ func (j *Job) state(ctx context.Context) (State, error) {
 	}
 	defer h.Close()
 	flags, err := h.job(st.JobID)
+	tracef("queue job %d: flags 0x%X err %v", st.JobID, flags, err)
 	if err == errJobGone {
 		return StateCompleted, nil
 	}

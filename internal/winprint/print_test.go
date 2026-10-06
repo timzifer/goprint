@@ -62,6 +62,8 @@ func TestPrintToPDF(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
+	Tracef = t.Logf
+	defer func() { Tracef = nil }()
 	const pages = 3
 	src := bytes.NewReader(testpdf.Generate(pages, testpdf.A4Width, testpdf.A4Height))
 	job, err := Print(ctx, src, Options{Printer: pdfPrinter, Title: "goprint test", OutputFile: out})

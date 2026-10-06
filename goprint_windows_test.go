@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/timzifer/goprint/internal/testpdf"
+	"github.com/timzifer/goprint/internal/winprint"
 )
 
 const pdfPrinter = "Microsoft Print to PDF"
@@ -38,6 +39,8 @@ func printToFile(t *testing.T, doc Document, s Settings) (*Job, []byte) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	out := filepath.Join(t.TempDir(), "out.pdf")
+	winprint.Tracef = t.Logf
+	defer func() { winprint.Tracef = nil }()
 	s.Printer = pdfPrinter
 	s.Vendor = map[string]string{VendorOutputFile: out}
 	job, err := Print(ctx, doc, s)
