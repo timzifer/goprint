@@ -494,6 +494,12 @@ func (d *dialog) makeDocument(target *com.Unknown) error {
 		d.mu.Unlock()
 		return nil
 	}
+	if PrinterGuard != nil {
+		// The dialog does not tell which printer the user picked before the
+		// job exists; refuse rather than risk a real device.
+		target.Call(targetCancel)
+		return fmt.Errorf("winprint: printing from the dialog is disabled by PrinterGuard")
+	}
 	r, err := newRenderer()
 	if err != nil {
 		return err
@@ -506,7 +512,7 @@ func (d *dialog) makeDocument(target *com.Unknown) error {
 	for i := range pages {
 		pages[i] = i
 	}
-	err = job.writeTarget(context.Background(), r, d.doc, target, pages, 0)
+	err = job.writeTarget(context.Background(), r, d.doc, target, pages, 0, paperLayout{})
 	if err == nil {
 		// The user picked the printer; look it up while the job is still
 		// queued (it may leave the queue quickly).

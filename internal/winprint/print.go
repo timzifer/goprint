@@ -49,6 +49,11 @@ type Options struct {
 	// OutputFile, if set, receives the printer output instead of the device
 	// (print to file).
 	OutputFile string
+	// Settings are applied through a DEVMODE converted into the job's
+	// PrintTicket (ignored if Ticket is set).
+	Settings JobSettings
+	// Strict fails before spooling if a setting cannot be applied.
+	Strict bool
 	// PageRanges selects pages; empty means all.
 	PageRanges []core.PageRange
 	// RasterDPI is the resolution for content Direct2D must rasterize.
@@ -142,7 +147,8 @@ type Job struct {
 	output  string // print-to-file target, verified when the job is done
 	sink    *statusSink
 
-	clipped  bool      // page ranges exceeded the document
+	clipped  bool // page ranges exceeded the document
+	warnings []Warning
 	closedAt time.Time // when the XPS package was completely handed to the spooler
 
 	mu       sync.Mutex
@@ -184,6 +190,9 @@ func (r *resources) release() {
 	})
 }
 
+// Warnings lists settings the printer could not apply.
+func (j *Job) Warnings() []Warning { return append([]Warning(nil), j.warnings...) }
+
 // PagesClipped reports whether page ranges reached beyond the document.
 func (j *Job) PagesClipped() bool { return j.clipped }
 
@@ -217,6 +226,18 @@ func newJob(printer, title string) *Job {
 	return j
 }
 
+// PrinterGuard, if set, is consulted before anything is sent to a printer
+// (headless and from the dialog). Tests set it so that they can never reach
+// a real device by accident.
+var PrinterGuard func(printer string) error
+
+func guard(printer string) error {
+	if g := PrinterGuard; g != nil {
+		return g(printer)
+	}
+	return nil
+}
+
 // Print renders the PDF from src and spools it.
 func Print(ctx context.Context, src io.Reader, opts Options) (*Job, error) {
 	if !addPageSupported {
@@ -228,6 +249,9 @@ func Print(ctx context.Context, src io.Reader, opts Options) (*Job, error) {
 			return nil, err
 		}
 		opts.Printer = def
+	}
+	if err := guard(opts.Printer); err != nil {
+		return nil, err
 	}
 	// Validate the printer name early for a clear error.
 	h, err := openPrinter(opts.Printer)
@@ -265,6 +289,25 @@ func (j *Job) spool(ctx context.Context, src io.Reader, opts Options) error {
 		return err
 	}
 	defer r.Close()
+
+	var lay paperLayout
+	if len(opts.Ticket) == 0 && !opts.Settings.isZero() {
+		dm, warns, err := BuildDevMode(opts.Printer, opts.Settings)
+		if err != nil {
+			return err
+		}
+		if opts.Settings.wantsLayout() {
+			lay = paperLayout{Paper: paperDIPs(opts.Printer, dm), Scaling: opts.Settings.Scaling}
+		}
+		j.warnings = append(j.warnings, warns...)
+		if opts.Strict && len(warns) > 0 {
+			return fmt.Errorf("%w: %s: %s", errdefs.ErrUnsupported, warns[0].Setting, warns[0].Message)
+		}
+		if opts.Ticket, err = PrintTicket(opts.Printer, dm); err != nil {
+			return fmt.Errorf("print ticket: %w", err)
+		}
+		tracef("print ticket: %d bytes, warnings %v", len(opts.Ticket), warns)
+	}
 
 	var ticket, output *com.Stream
 	if len(opts.Ticket) > 0 {
@@ -310,12 +353,12 @@ func (j *Job) spool(ctx context.Context, src io.Reader, opts Options) error {
 	if len(pages) == 0 {
 		return fmt.Errorf("%w: page ranges select no page of %d", errdefs.ErrInvalid, doc.pages)
 	}
-	return j.writeTarget(ctx, r, doc, target, pages, opts.RasterDPI)
+	return j.writeTarget(ctx, r, doc, target, pages, opts.RasterDPI, lay)
 }
 
 // writeTarget subscribes to the target's status events and writes the
 // selected pages as XPS package into it.
-func (j *Job) writeTarget(ctx context.Context, r *renderer, doc *pdfDoc, target *com.Unknown, pages []int, dpi float32) error {
+func (j *Job) writeTarget(ctx context.Context, r *renderer, doc *pdfDoc, target *com.Unknown, pages []int, dpi float32, lay paperLayout) error {
 	// The subscription outlives the call: the event carrying the spooler job
 	// id may arrive late.
 	unadvise, err := j.advise(target)
@@ -344,7 +387,7 @@ func (j *Job) writeTarget(ctx context.Context, r *renderer, doc *pdfDoc, target 
 			target.Call(targetCancel)
 			return err
 		}
-		if err := addPage(r, control, doc, i); err != nil {
+		if err := addPage(r, control, doc, i, lay); err != nil {
 			target.Call(targetCancel)
 			return fmt.Errorf("page %d: %w", i+1, err)
 		}
@@ -359,18 +402,30 @@ func (j *Job) writeTarget(ctx context.Context, r *renderer, doc *pdfDoc, target 
 	return nil
 }
 
-func addPage(r *renderer, control *com.Unknown, doc *pdfDoc, i int) error {
+// paperLayout places PDF pages on paper. A zero Paper keeps each page's
+// own size.
+type paperLayout struct {
+	Paper   size // DIPs
+	Scaling int  // core.Scale*
+}
+
+func addPage(r *renderer, control *com.Unknown, doc *pdfDoc, i int, lay paperLayout) error {
 	page, sz, err := doc.page(i)
 	if err != nil {
 		return err
 	}
 	defer page.Release()
-	list, err := r.renderPage(page)
+	m, out := identity, sz
+	if lay.Paper.W > 0 && lay.Paper.H > 0 {
+		s, dx, dy := core.Layout(float64(sz.W), float64(sz.H), float64(lay.Paper.W), float64(lay.Paper.H), lay.Scaling)
+		m, out = matrix{float32(s), 0, 0, float32(s), float32(dx), float32(dy)}, lay.Paper
+	}
+	list, err := r.renderPage(page, m)
 	if err != nil {
 		return err
 	}
 	defer list.Release()
-	args := append([]uintptr{list.Ptr()}, sizeArgs(sz)...)
+	args := append([]uintptr{list.Ptr()}, sizeArgs(out)...)
 	args = append(args, 0, 0, 0) // page ticket, tag1, tag2
 	return control.CallHR("ID2D1PrintControl.AddPage", printControlAddPage, args...)
 }

@@ -41,6 +41,7 @@ const (
 	d2dDeviceCreateDeviceContext = 4
 	d2dDeviceCreatePrintControl  = 5
 
+	d2dCtxSetTransform      = 30
 	d2dCtxBeginDraw         = 48
 	d2dCtxEndDraw           = 49
 	d2dCtxCreateCommandList = 67
@@ -119,18 +120,26 @@ func (r *renderer) Close() {
 	*r = renderer{}
 }
 
-// renderPage records one PDF page into a new, closed command list.
-func (r *renderer) renderPage(page *com.Unknown) (*com.Unknown, error) {
+// matrix is a D2D1_MATRIX_3X2_F.
+type matrix [6]float32
+
+var identity = matrix{1, 0, 0, 1, 0, 0}
+
+// renderPage records one PDF page into a new, closed command list, drawn
+// with transform m.
+func (r *renderer) renderPage(page *com.Unknown, m matrix) (*com.Unknown, error) {
 	var list *com.Unknown
 	if err := r.ctx.CallHR("ID2D1DeviceContext.CreateCommandList", d2dCtxCreateCommandList, uintptr(unsafe.Pointer(&list))); err != nil {
 		return nil, err
 	}
 	r.ctx.Call(d2dCtxSetTarget, list.Ptr())
 	r.ctx.Call(d2dCtxBeginDraw)
+	r.ctx.Call(d2dCtxSetTransform, uintptr(unsafe.Pointer(&m)))
 	err := r.pdf.CallHR("IPdfRendererNative.RenderPageToDeviceContext", pdfRendererRenderPageToDeviceContext, page.Ptr(), r.ctx.Ptr(), 0)
 	if endErr := r.ctx.CallHR("ID2D1DeviceContext.EndDraw", d2dCtxEndDraw, 0, 0); err == nil {
 		err = endErr
 	}
+	r.ctx.Call(d2dCtxSetTransform, uintptr(unsafe.Pointer(&identity)))
 	r.ctx.Call(d2dCtxSetTarget, 0)
 	if err == nil {
 		err = list.CallHR("ID2D1CommandList.Close", d2dCommandListClose)
