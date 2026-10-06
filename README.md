@@ -18,8 +18,15 @@ headless or through the native print dialog.
   orientation, duplex, color, collation – and the user's choice comes back as
   structured `Settings`. On Windows the modern dialog with live preview is supported.
 
-> **Status:** early development. The API is not stable yet and the platform
-> backends currently return `ErrUnsupported`.
+> **Status:** early development, the API is not stable yet.
+>
+> | Feature | Linux/BSD | macOS | Windows |
+> |---|---|---|---|
+> | `Printers` | – | – | ✓ |
+> | `Print` (headless) | – | – | ✓ amd64/386 (PDF and images, page ranges; other settings are reported as warnings) |
+> | `Dialog` | – | – | – |
+>
+> Unimplemented parts return `ErrUnsupported` / `ErrNoDialog`.
 
 ## Usage
 
@@ -52,6 +59,10 @@ if errors.Is(err, goprint.ErrCanceled) {
 	// user canceled
 }
 ```
+
+On Windows, `Settings.Vendor[goprint.VendorOutputFile]` writes the printer
+output to a file instead of the device, e.g. to get a PDF from
+"Microsoft Print to PDF" without its save dialog.
 
 ## Platforms
 
