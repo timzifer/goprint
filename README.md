@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/timzifer/goprint/actions/workflows/ci.yml/badge.svg)](https://github.com/timzifer/goprint/actions/workflows/ci.yml)
 [![Fuzz](https://github.com/timzifer/goprint/actions/workflows/fuzz.yml/badge.svg)](https://github.com/timzifer/goprint/actions/workflows/fuzz.yml)
+[![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/timzifer/goprint/badges/coverage.json)](https://github.com/timzifer/goprint/actions/workflows/ci.yml)
 [![Go Reference](https://pkg.go.dev/badge/github.com/timzifer/goprint.svg)](https://pkg.go.dev/github.com/timzifer/goprint)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
@@ -80,6 +81,8 @@ GOOS=windows go vet ./...             # vet another platform
 
 CI runs tests on Linux, macOS and Windows, `go vet`, `staticcheck`,
 `govulncheck`, a cross-compile matrix with `CGO_ENABLED=0` and nightly fuzzing.
+
+Changes to `main` go through pull requests; the `ci-ok` check must be green.
 
 ## License
 
