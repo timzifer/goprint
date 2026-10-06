@@ -54,6 +54,10 @@ type Options struct {
 	RasterDPI float32
 }
 
+// jobIDTimeout bounds how long State waits for package events (job id,
+// completion) after the package was closed before trusting the queue alone.
+const jobIDTimeout = 30 * time.Second
+
 // Package completion values (PrintDocumentPackageCompletion).
 const (
 	completionInProgress = 0
@@ -124,45 +128,43 @@ type Job struct {
 	printer string
 	sink    *statusSink
 
-	clipped bool // page ranges exceeded the document
-	closed  bool // the XPS package was completely handed to the spooler
+	clipped  bool      // page ranges exceeded the document
+	closedAt time.Time // when the XPS package was completely handed to the spooler
 
 	mu       sync.Mutex
 	canceled bool
 	res      *resources // released when the job reaches a final state
 }
 
-// resources holds COM references a job keeps until it is final. release
-// is idempotent, so the explicit path and the cleanup safety net can race.
+// resources holds what a job keeps until it is final: the output stream the
+// spooler writes through and the status event subscription. release is
+// idempotent, so the explicit path and the cleanup safety net can race.
 type resources struct {
-	mu   sync.Mutex
-	held []*com.Unknown
+	mu    sync.Mutex
+	frees []func()
 }
 
-func (r *resources) keep(u *com.Unknown) {
+func (r *resources) keep(free func()) {
 	r.mu.Lock()
-	r.held = append(r.held, u)
+	r.frees = append(r.frees, free)
 	r.mu.Unlock()
 }
 
 func (r *resources) release() {
 	r.mu.Lock()
-	held := r.held
-	r.held = nil
+	frees := r.frees
+	r.frees = nil
 	r.mu.Unlock()
-	if len(held) > 0 {
-		releaseOnApartment(held)
+	if len(frees) == 0 {
+		return
 	}
-}
-
-func releaseOnApartment(held []*com.Unknown) {
 	a, err := apartment()
 	if err != nil {
 		return
 	}
 	_ = a.Do(context.Background(), func() error {
-		for _, u := range held {
-			u.Release()
+		for i := len(frees) - 1; i >= 0; i-- {
+			frees[i]()
 		}
 		return nil
 	})
@@ -257,7 +259,7 @@ func (j *Job) spool(ctx context.Context, src io.Reader, opts Options) error {
 		}
 		// The spooler writes the printer output through this stream while the
 		// job is processed, after spool returns; the job owns it from here.
-		j.res.keep(&output.Unknown)
+		j.res.keep(output.Release)
 	}
 
 	factory, err := com.CreateInstance(&clsidPrintDocumentPackageTargetFactory, &iidIPrintDocumentPackageTargetFactory, com.CLSCTX_INPROC_SERVER)
@@ -281,11 +283,13 @@ func (j *Job) spool(ctx context.Context, src io.Reader, opts Options) error {
 	}
 	defer target.Release()
 
+	// The subscription outlives spool: the event carrying the spooler job id
+	// may arrive late.
 	unadvise, err := j.advise(target)
 	if err != nil {
 		return err
 	}
-	defer unadvise()
+	j.res.keep(unadvise)
 
 	dpi := opts.RasterDPI
 	if dpi == 0 {
@@ -322,7 +326,7 @@ func (j *Job) spool(ctx context.Context, src io.Reader, opts Options) error {
 		return err
 	}
 	j.mu.Lock()
-	j.closed = true
+	j.closedAt = time.Now()
 	j.mu.Unlock()
 	return nil
 }
@@ -414,7 +418,8 @@ func (j *Job) State(ctx context.Context) (State, error) {
 
 func (j *Job) state(ctx context.Context) (State, error) {
 	j.mu.Lock()
-	canceled, closed := j.canceled, j.closed
+	canceled, closedAt := j.canceled, j.closedAt
+	closed := !closedAt.IsZero()
 	j.mu.Unlock()
 	if canceled {
 		return StateCanceled, nil
@@ -427,17 +432,22 @@ func (j *Job) state(ctx context.Context) (State, error) {
 		case completionFailed:
 			return StateAborted, nil
 		case completionInProgress:
-			// The final package event may arrive after the sink was
-			// unadvised; once the package is closed the queue is authoritative.
-			if !closed {
+			// "Not in the queue" is ambiguous (not yet vs. already done), so
+			// the queue is only consulted once the package is complete. If the
+			// final event never comes, fall back to the queue after a while.
+			if !closed || time.Since(closedAt) < jobIDTimeout {
 				return StateProcessing, nil
 			}
 		}
 	}
 	if !ok || st.JobID == 0 {
-		// Package completed (Close succeeded) but no spooler job is known:
-		// treat as handed off.
-		return StateCompleted, nil
+		// No spooler job id yet. Wait for the event; if none ever comes
+		// (some drivers), the package being closed for a while is all we
+		// can know.
+		if closed && time.Since(closedAt) > jobIDTimeout {
+			return StateCompleted, nil
+		}
+		return StateProcessing, nil
 	}
 	h, err := openPrinter(j.printer)
 	if err != nil {
