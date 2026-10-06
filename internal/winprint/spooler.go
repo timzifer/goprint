@@ -158,20 +158,58 @@ const (
 var errJobGone = errors.New("winprint: job no longer in queue")
 
 func (h printerHandle) job(id uint32) (status uint32, err error) {
+	info, err := h.jobInfo(id)
+	return info.statusFlags, err
+}
+
+// jobDocument returns the document name of a queued job.
+func (h printerHandle) jobDocument(id uint32) (string, error) {
+	info, err := h.jobInfo(id)
+	if err != nil {
+		return "", err
+	}
+	return windows.UTF16PtrToString(info.document), nil
+}
+
+func (h printerHandle) jobInfo(id uint32) (jobInfo1, error) {
 	var needed uint32
 	syscall.SyscallN(procGetJobW.Addr(), uintptr(h), uintptr(id), 1, 0, 0, uintptr(unsafe.Pointer(&needed)))
 	if needed == 0 {
-		return 0, errJobGone
+		return jobInfo1{}, errJobGone
 	}
 	buf := make([]uint64, (needed+7)/8)
 	r, _, e := syscall.SyscallN(procGetJobW.Addr(), uintptr(h), uintptr(id), 1, uintptr(unsafe.Pointer(&buf[0])), uintptr(needed), uintptr(unsafe.Pointer(&needed)))
 	if r == 0 {
 		if e == windows.ERROR_INVALID_PARAMETER {
-			return 0, errJobGone
+			return jobInfo1{}, errJobGone
 		}
-		return 0, fmt.Errorf("GetJobW: %w", e)
+		return jobInfo1{}, fmt.Errorf("GetJobW: %w", e)
 	}
-	return (*jobInfo1)(unsafe.Pointer(&buf[0])).statusFlags, nil
+	// The strings point into buf, which the returned copy keeps alive only
+	// until the caller is done with it; callers convert them immediately.
+	return *(*jobInfo1)(unsafe.Pointer(&buf[0])), nil
+}
+
+// findJobPrinter returns the printer whose queue holds job id with the given
+// document name. Spooler job ids are unique per print server, the name
+// guards against a reused id.
+func findJobPrinter(id uint32, document string) (string, error) {
+	ps, err := Printers()
+	if err != nil {
+		return "", err
+	}
+	for _, p := range ps {
+		h, err := openPrinter(p.Name)
+		if err != nil {
+			continue
+		}
+		doc, err := h.jobDocument(id)
+		h.Close()
+		if err == nil && doc == document {
+			return p.Name, nil
+		}
+	}
+	return "", errJobGone
 }
 
 const jobControlDelete = 5

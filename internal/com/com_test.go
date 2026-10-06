@@ -149,3 +149,52 @@ func TestStreams(t *testing.T) {
 	ra.Release()
 	_ = unsafe.Sizeof(0)
 }
+
+var iidTest2 = MustGUID("6B1D3C2A-2222-4C4C-9A9A-0123456789AB")
+
+func TestMultiObject(t *testing.T) {
+	impl := &testImpl{}
+	before := liveObjects()
+	vt2 := NewInspectableVTable()
+	ps, err := NewMultiObject(impl, Interface{VT: testVTable, IIDs: []GUID{iidTest}}, Interface{VT: vt2, IIDs: []GUID{iidTest2, IIDIInspectable}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, b := ps[0], ps[1]
+	if a == b {
+		t.Fatal("interfaces share a pointer")
+	}
+	// QI across interfaces, and IUnknown identity.
+	got, err := a.QueryInterface(&iidTest2)
+	if err != nil || got != b {
+		t.Fatalf("QI(iidTest2) = %p, %v; want %p", got, err, b)
+	}
+	got.Release()
+	unk, err := b.QueryInterface(&IIDIUnknown)
+	if err != nil || unk != a {
+		t.Fatalf("QI(IUnknown) from second interface = %p, %v; want %p", unk, err, a)
+	}
+	unk.Release()
+	if Lookup(b.Ptr()) != impl {
+		t.Fatal("Lookup on second interface failed")
+	}
+	// IInspectable stubs.
+	var level int32 = -1
+	if hr := b.Call(5, uintptr(unsafe.Pointer(&level))); hr != S_OK || level != 0 {
+		t.Fatalf("GetTrustLevel = 0x%X, %d", hr, level)
+	}
+	// IMarshal comes from the aggregated free-threaded marshaler and keeps
+	// the object alive.
+	m, err := a.QueryInterface(&IIDIMarshal)
+	if err != nil {
+		t.Fatalf("QI(IMarshal): %v", err)
+	}
+	b.Release() // drop the creation reference
+	if impl.destroyed {
+		t.Fatal("destroyed while IMarshal is held")
+	}
+	m.Release()
+	if !impl.destroyed || liveObjects() != before {
+		t.Fatalf("not destroyed after last release (destroyed=%v, live=%d)", impl.destroyed, liveObjects())
+	}
+}
