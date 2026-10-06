@@ -137,10 +137,43 @@ jobs:
           go build ./...
           go test -c -o /dev/null .
 
+  integration-cups:
+    name: integration (CUPS, ${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+      - name: Set up CUPS with a cups-pdf queue
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q cups printer-driver-cups-pdf
+          sudo systemctl start cups
+          # cups-pdf writes to $HOME/PDF by default; also allow the spool dir.
+          mkdir -p "$HOME/PDF"
+          for i in $(seq 1 20); do lpstat -p PDF >/dev/null 2>&1 && break; sleep 1; done
+          sudo cupsenable PDF && sudo cupsaccept PDF
+          lpstat -t
+      - name: Test against CUPS
+        env:
+          GOPRINT_CUPS: "1"
+          GOPRINT_CUPS_PDF: ${{ runner.os == 'Linux' && 'PDF' || '' }}
+          GOPRINT_CUPS_PDF_OUT: /home/runner/PDF:/var/spool/cups-pdf/runner:/var/spool/cups-pdf/ANONYMOUS
+        run: go test -count=1 -v -run 'CUPS' .
+      - name: CUPS logs
+        if: failure() && runner.os == 'Linux'
+        run: sudo tail -n 100 /var/log/cups/error_log /var/log/cups/cups-pdf_log 2>/dev/null || true
+
   # Single required status check for branch protection.
   ci-ok:
     if: always()
-    needs: [test, coverage, lint, cross-compile]
+    needs: [test, coverage, lint, cross-compile, integration-cups]
     runs-on: ubuntu-latest
     steps:
       - name: All jobs succeeded

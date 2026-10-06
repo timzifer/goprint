@@ -172,20 +172,16 @@ var cupsSockets = []string{
 	"/private/var/run/cupsd", // macOS
 }
 
-// NewCUPSClient returns a client for the local CUPS scheduler. The server
-// is the first of: the unix sockets /run/cups/cups.sock,
-// /var/run/cups/cups.sock and /private/var/run/cupsd (macOS) that exists,
-// $CUPS_SERVER (a socket path or host[:port]), or localhost:631.
+// NewCUPSClient returns a client for the CUPS scheduler. As with libcups,
+// $CUPS_SERVER (a socket path, URL or host[:port]) wins if set; otherwise the
+// server is the first existing unix socket of /run/cups/cups.sock,
+// /var/run/cups/cups.sock and /private/var/run/cupsd (macOS), or
+// localhost:631.
 func NewCUPSClient(opts ...Option) (*Client, error) {
 	return NewClient(cupsServer(os.Stat, os.Getenv), opts...)
 }
 
 func cupsServer(stat func(string) (fs.FileInfo, error), getenv func(string) string) string {
-	for _, p := range cupsSockets {
-		if fi, err := stat(p); err == nil && fi.Mode()&fs.ModeSocket != 0 {
-			return p
-		}
-	}
 	if s := getenv("CUPS_SERVER"); s != "" {
 		if strings.HasPrefix(s, "/") || strings.Contains(s, "://") {
 			return s
@@ -193,6 +189,11 @@ func cupsServer(stat func(string) (fs.FileInfo, error), getenv func(string) stri
 		// host[:port][/version=1.1]
 		s, _, _ = strings.Cut(s, "/")
 		return "ipp://" + s
+	}
+	for _, p := range cupsSockets {
+		if fi, err := stat(p); err == nil && fi.Mode()&fs.ModeSocket != 0 {
+			return p
+		}
 	}
 	return "ipp://localhost:" + DefaultPort
 }

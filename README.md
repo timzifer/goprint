@@ -22,8 +22,9 @@ headless or through the native print dialog.
 >
 > | Feature | Linux/BSD | macOS | Windows |
 > |---|---|---|---|
-> | `Printers` | – | – | ✓ |
-> | `Print` (headless) | – | – | ✓ amd64/386 (PDF and images, page ranges; other settings are reported as warnings) |
+> | `Printers`, `GetCapabilities` | ✓ (CUPS) | ✓ (CUPS) | ✓ `Printers` |
+> | `Print` (headless) | ✓ all settings via IPP | ✓ all settings via IPP | ✓ amd64/386 (PDF and images, page ranges; other settings are reported as warnings) |
+> | IPP Everywhere printer by URI (`Printer: "ipp://…"`) | ✓ | ✓ | ✓ |
 > | `Dialog` | – | – | ✓ amd64/386: modern dialog with live preview; presets/results for copies, media, orientation, duplex, color, collation, quality |
 >
 > Unimplemented parts return `ErrUnsupported` / `ErrNoDialog`.

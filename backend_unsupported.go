@@ -1,4 +1,4 @@
-//go:build !windows
+//go:build !(linux || freebsd || openbsd || netbsd || dragonfly || darwin || windows)
 
 package goprint
 

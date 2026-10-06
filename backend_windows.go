@@ -9,6 +9,7 @@ import (
 
 	"github.com/timzifer/goprint/internal/core"
 	"github.com/timzifer/goprint/internal/winprint"
+	"github.com/timzifer/goprint/ipp"
 )
 
 // VendorOutputFile is a Settings.Vendor key understood on Windows: the
@@ -33,12 +34,24 @@ func (windowsBackend) printers(context.Context) ([]Printer, error) {
 	return out, nil
 }
 
-func (windowsBackend) capabilities(context.Context, string) (Capabilities, error) {
+// ippDirect handles printers given as ipp:// or ipps:// URI (IPP
+// Everywhere network printers) on Windows.
+var ippDirect = ippBackend{newClient: func(...ipp.Option) (*ipp.Client, error) {
+	return nil, fmt.Errorf("%w: no CUPS server on windows", ErrUnsupported)
+}}
+
+func (windowsBackend) capabilities(ctx context.Context, printer string) (Capabilities, error) {
+	if isPrinterURI(printer) {
+		return ippDirect.capabilities(ctx, printer)
+	}
 	// TODO(phase 3): PrintCapabilities via prntvpt.dll.
 	return Capabilities{}, fmt.Errorf("%w: capabilities on windows (not yet implemented)", ErrUnsupported)
 }
 
 func (windowsBackend) print(ctx context.Context, src io.Reader, doc Document, s Settings) (*Job, error) {
+	if isPrinterURI(s.Printer) {
+		return ippDirect.print(ctx, src, doc, s)
+	}
 	warnings := windowsUnmapped(s)
 	if s.Strict && len(warnings) > 0 {
 		return nil, fmt.Errorf("%w: %s", ErrUnsupported, warnings[0])
