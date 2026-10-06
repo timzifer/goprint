@@ -137,7 +137,8 @@ var statusSinkVTable = com.NewVTable(
 
 // Job is a spooled print job.
 type Job struct {
-	printer string
+	printer string // empty until known for dialog jobs
+	title   string
 	output  string // print-to-file target, verified when the job is done
 	sink    *statusSink
 
@@ -208,6 +209,14 @@ func apartment() (*com.Apartment, error) {
 	return mta.a, mta.err
 }
 
+func newJob(printer, title string) *Job {
+	j := &Job{printer: printer, title: title, sink: &statusSink{update: make(chan struct{}, 1)}, res: &resources{}}
+	// Safety net for jobs nobody waits on: release held objects (closing an
+	// output file) when the Job becomes unreachable.
+	runtime.AddCleanup(j, (*resources).release, j.res)
+	return j
+}
+
 // Print renders the PDF from src and spools it.
 func Print(ctx context.Context, src io.Reader, opts Options) (*Job, error) {
 	if !addPageSupported {
@@ -231,15 +240,13 @@ func Print(ctx context.Context, src io.Reader, opts Options) (*Job, error) {
 	if err != nil {
 		return nil, err
 	}
-	job := &Job{printer: opts.Printer, output: opts.OutputFile, sink: &statusSink{update: make(chan struct{}, 1)}, res: &resources{}}
+	job := newJob(opts.Printer, opts.Title)
+	job.output = opts.OutputFile
 	err = a.Do(ctx, func() error { return job.spool(ctx, src, opts) })
 	if err != nil {
 		job.res.release()
 		return nil, err
 	}
-	// Safety net for jobs nobody waits on: release held streams (closing an
-	// output file) when the Job becomes unreachable.
-	runtime.AddCleanup(job, (*resources).release, job.res)
 	return job, nil
 }
 
@@ -298,15 +305,25 @@ func (j *Job) spool(ctx context.Context, src io.Reader, opts Options) error {
 	// it) after Close returns; release it only once the job is final.
 	j.res.keep(target.Release)
 
-	// The subscription outlives spool: the event carrying the spooler job id
-	// may arrive late.
+	pages, clipped := core.SelectPages(opts.PageRanges, doc.pages)
+	j.clipped = clipped
+	if len(pages) == 0 {
+		return fmt.Errorf("%w: page ranges select no page of %d", errdefs.ErrInvalid, doc.pages)
+	}
+	return j.writeTarget(ctx, r, doc, target, pages, opts.RasterDPI)
+}
+
+// writeTarget subscribes to the target's status events and writes the
+// selected pages as XPS package into it.
+func (j *Job) writeTarget(ctx context.Context, r *renderer, doc *pdfDoc, target *com.Unknown, pages []int, dpi float32) error {
+	// The subscription outlives the call: the event carrying the spooler job
+	// id may arrive late.
 	unadvise, err := j.advise(target)
 	if err != nil {
 		return err
 	}
 	j.res.keep(unadvise)
 
-	dpi := opts.RasterDPI
 	if dpi == 0 {
 		dpi = 150
 	}
@@ -322,11 +339,6 @@ func (j *Job) spool(ctx context.Context, src io.Reader, opts Options) error {
 	}
 	defer control.Release()
 
-	pages, clipped := core.SelectPages(opts.PageRanges, doc.pages)
-	j.clipped = clipped
-	if len(pages) == 0 {
-		return fmt.Errorf("%w: page ranges select no page of %d", errdefs.ErrInvalid, doc.pages)
-	}
 	for _, i := range pages {
 		if err := ctx.Err(); err != nil {
 			target.Call(targetCancel)
@@ -407,6 +419,31 @@ func utf16(s string) (*uint16, error) {
 	return p, nil
 }
 
+// printerName returns the job's printer, looking it up by job id for
+// dialog jobs where the user picked it.
+func (j *Job) printerName() string {
+	j.mu.Lock()
+	name := j.printer
+	j.mu.Unlock()
+	if name != "" {
+		return name
+	}
+	id := j.spoolerID()
+	if id == 0 {
+		return ""
+	}
+	if found, err := findJobPrinter(id, j.title); err == nil {
+		j.mu.Lock()
+		j.printer = found
+		j.mu.Unlock()
+		return found
+	}
+	return ""
+}
+
+// Printer returns the printer the job was sent to, if known.
+func (j *Job) Printer() string { return j.printerName() }
+
 // ID returns the spooler job id, or "" if not yet known.
 func (j *Job) ID() string {
 	if id := j.spoolerID(); id != 0 {
@@ -467,7 +504,16 @@ func (j *Job) state(ctx context.Context) (State, error) {
 		}
 		return StateProcessing, nil
 	}
-	h, err := openPrinter(j.printer)
+	name := j.printerName()
+	if name == "" {
+		// Dialog job whose printer is not known (yet): only the package
+		// events tell us something.
+		if closed && time.Since(closedAt) > jobIDTimeout {
+			return StateCompleted, nil
+		}
+		return StateProcessing, nil
+	}
+	h, err := openPrinter(name)
 	if err != nil {
 		return StatePending, err
 	}
@@ -559,7 +605,7 @@ func (j *Job) Cancel(ctx context.Context) error {
 	if id == 0 {
 		return fmt.Errorf("winprint: job id unknown, cannot cancel")
 	}
-	h, err := openPrinter(j.printer)
+	h, err := openPrinter(j.printerName())
 	if err != nil {
 		return err
 	}

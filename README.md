@@ -24,7 +24,7 @@ headless or through the native print dialog.
 > |---|---|---|---|
 > | `Printers` | – | – | ✓ |
 > | `Print` (headless) | – | – | ✓ amd64/386 (PDF and images, page ranges; other settings are reported as warnings) |
-> | `Dialog` | – | – | – |
+> | `Dialog` | – | – | ✓ amd64/386: modern dialog with live preview; presets/results for copies, media, orientation, duplex, color, collation, quality |
 >
 > Unimplemented parts return `ErrUnsupported` / `ErrNoDialog`.
 
@@ -59,6 +59,11 @@ if errors.Is(err, goprint.ErrCanceled) {
 	// user canceled
 }
 ```
+
+On Windows, the modern print dialog cannot preselect a printer, and with
+`DialogOptions.PrintNow == false` a print-to-file printer still asks for a
+file name (the dialog creates the job before goprint can withdraw it). The
+classic dialog, which handles both, is not implemented yet.
 
 On Windows, `Settings.Vendor[goprint.VendorOutputFile]` writes the printer
 output to a file instead of the device, e.g. to get a PDF from

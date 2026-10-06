@@ -58,11 +58,6 @@ func (windowsBackend) print(ctx context.Context, src io.Reader, doc Document, s 
 	return &Job{b: windowsJob{j}, warnings: warnings}, nil
 }
 
-func (windowsBackend) dialog(context.Context, Document, DialogOptions) (*Job, Settings, error) {
-	// TODO(phase 1b/3): modern dialog with preview, classic PrintDlgEx.
-	return nil, Settings{}, fmt.Errorf("%w: dialogs on windows are not implemented yet", ErrNoDialog)
-}
-
 func corePageRanges(rs []PageRange) []core.PageRange {
 	var out []core.PageRange
 	for _, r := range rs {

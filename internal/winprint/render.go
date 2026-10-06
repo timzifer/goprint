@@ -154,6 +154,11 @@ func loadPDF(ctx context.Context, src io.Reader) (*pdfDoc, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read PDF: %w", err)
 	}
+	return loadPDFBytes(ctx, data)
+}
+
+// loadPDFBytes loads a PDF held in memory with Windows.Data.Pdf.
+func loadPDFBytes(ctx context.Context, data []byte) (*pdfDoc, error) {
 	stream, err := com.NewMemStream(data)
 	if err != nil {
 		return nil, err
