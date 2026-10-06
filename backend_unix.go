@@ -4,6 +4,6 @@ package goprint
 
 import "github.com/timzifer/goprint/ipp"
 
-// Headless printing talks IPP to the local CUPS scheduler: no lp, no libcups.
-// TODO(phase 4): dialog via xdg-desktop-portal.
-var platform backend = ippBackend{newClient: ipp.NewCUPSClient}
+// Headless printing talks IPP to the local CUPS scheduler: no lp, no
+// libcups. The dialog goes through xdg-desktop-portal (dialog_unix.go).
+var platform backend = unixBackend{ippBackend{newClient: ipp.NewCUPSClient}}

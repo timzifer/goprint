@@ -170,10 +170,25 @@ jobs:
         if: failure() && runner.os == 'Linux'
         run: sudo tail -n 100 /var/log/cups/error_log /var/log/cups/cups-pdf_log 2>/dev/null || true
 
+  integration-portal:
+    name: integration (print portal, D-Bus)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+      - name: Install dbus-daemon
+        run: sudo apt-get update -q && sudo apt-get install -y -q dbus
+      - name: Test against a fake portal on a private bus
+        env:
+          GOPRINT_PORTAL_TEST: "1"
+        run: go test -count=1 -v -run 'Portal' .
+
   # Single required status check for branch protection.
   ci-ok:
     if: always()
-    needs: [test, coverage, lint, cross-compile, integration-cups]
+    needs: [test, coverage, lint, cross-compile, integration-cups, integration-portal]
     runs-on: ubuntu-latest
     steps:
       - name: All jobs succeeded

@@ -25,7 +25,7 @@ headless or through the native print dialog.
 > | `Printers`, `GetCapabilities` | ✓ (CUPS) | ✓ (CUPS) | ✓ |
 > | `Print` (headless) | ✓ all settings via IPP | ✓ all settings via IPP | ✓ amd64/386, all settings via DEVMODE/PrintTicket |
 > | IPP Everywhere printer by URI (`Printer: "ipp://…"`) | ✓ | ✓ | ✓ |
-> | `Dialog` | – | – | ✓ amd64/386: modern dialog with live preview and page selection; classic `PrintDlgEx` for settings-only use |
+> | `Dialog` | ✓ desktop dialog via xdg-desktop-portal (presets + result; no job tracking) | – | ✓ amd64/386: modern dialog with live preview and page selection; classic `PrintDlgEx` for settings-only use |
 >
 > Unimplemented parts return `ErrUnsupported` / `ErrNoDialog`.
 
@@ -60,6 +60,14 @@ if errors.Is(err, goprint.ErrCanceled) {
 	// user canceled
 }
 ```
+
+On Linux/BSD, `Dialog` shows the desktop's print dialog through
+xdg-desktop-portal (`org.freedesktop.portal.Print`), so it also works in
+Flatpak and Snap. Whether a preview is shown and whether presets such as the
+printer are honored is up to the portal implementation; with
+`RequirePrinter`, goprint refuses to print if the dialog returns another
+printer. Jobs printed through the portal cannot be tracked or canceled.
+Without a running portal, `Dialog` returns `ErrNoDialog`.
 
 On Windows, the modern print dialog cannot preselect a printer. Windows 11
 also shows the classic dialog (`PrintDlgEx`) as its modern dialog and then
