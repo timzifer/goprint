@@ -5,6 +5,7 @@ package goprint
 import (
 	"context"
 	"fmt"
+	"io"
 
 	"golang.org/x/sys/windows"
 
@@ -104,7 +105,7 @@ func toTaskOptions(s Settings) (winprint.TaskOptions, []Warning) {
 		warn("Printer", "the modern windows print dialog cannot preselect a printer")
 	}
 	if len(s.PageRanges) > 0 {
-		warn("PageRanges", "not yet supported by the windows print dialog; all pages are printed")
+		warn("PageRanges", "the modern windows print dialog cannot preset page ranges; the user picks them")
 	}
 	if s.Scaling != ScalingDefault {
 		warn("Scaling", "not yet supported on windows")
@@ -177,16 +178,17 @@ func fromTaskOptions(o winprint.TaskOptions, preset Settings) Settings {
 }
 
 func (windowsBackend) dialog(ctx context.Context, doc Document, opts DialogOptions) (*Job, Settings, error) {
-	switch {
-	case opts.Style == StyleClassic:
-		return nil, Settings{}, fmt.Errorf("%w: classic print dialog on windows (not yet implemented)", ErrUnsupported)
-	case opts.RequirePrinter && opts.Settings.Printer != "":
-		// Needs the classic dialog, which can preselect the printer.
-		return nil, Settings{}, fmt.Errorf("%w: RequirePrinter needs the classic dialog (not yet implemented)", ErrUnsupported)
+	classic := opts.Style == StyleClassic || (opts.Style == StyleAuto && !opts.PrintNow)
+	if opts.RequirePrinter && opts.Settings.Printer != "" {
+		if winprint.LegacyDialogRedirected() {
+			// Windows 11 shows PrintDlgEx as its modern dialog, which ignores
+			// the printer preselection.
+			return nil, Settings{}, fmt.Errorf("%w: this Windows print dialog cannot preselect a printer (RequirePrinter)", ErrUnsupported)
+		}
+		classic = true
 	}
-	presets, warnings := toTaskOptions(opts.Settings)
-	if opts.Settings.Strict && len(warnings) > 0 {
-		return nil, Settings{}, fmt.Errorf("%w: %s", ErrUnsupported, warnings[0])
+	if opts.Style == StyleModern {
+		classic = false
 	}
 	src, err := doc.open()
 	if err != nil {
@@ -196,6 +198,14 @@ func (windowsBackend) dialog(ctx context.Context, doc Document, opts DialogOptio
 	title := doc.Title
 	if title == "" {
 		title = "Document"
+	}
+	if classic {
+		return classicDialog(ctx, src, title, opts)
+	}
+
+	presets, warnings := toTaskOptions(opts.Settings)
+	if opts.Settings.Strict && len(warnings) > 0 {
+		return nil, Settings{}, fmt.Errorf("%w: %s", ErrUnsupported, warnings[0])
 	}
 	res, err := winprint.Dialog(ctx, src, winprint.DialogOptions{
 		Owner:    windows.HWND(opts.Owner),
@@ -211,5 +221,39 @@ func (windowsBackend) dialog(ctx context.Context, doc Document, opts DialogOptio
 		return nil, chosen, nil
 	}
 	chosen.Printer = res.Job.Printer()
+	return &Job{b: windowsJob{res.Job}, warnings: warnings}, chosen, nil
+}
+
+// classicDialog runs PrintDlgExW: full DEVMODE presets, page ranges, no
+// preview, and no job unless PrintNow.
+func classicDialog(ctx context.Context, src io.Reader, title string, opts DialogOptions) (*Job, Settings, error) {
+	js, warnings := toJobSettings(opts.Settings)
+	if opts.Settings.Printer != "" && winprint.LegacyDialogRedirected() {
+		warnings = append(warnings, Warning{"Printer", "this Windows print dialog cannot preselect a printer"})
+	}
+	if opts.Settings.Strict && len(warnings) > 0 {
+		return nil, Settings{}, fmt.Errorf("%w: %s", ErrUnsupported, warnings[0])
+	}
+	res, err := winprint.ClassicDialog(ctx, src, winprint.ClassicOptions{
+		Owner:      windows.HWND(opts.Owner),
+		Title:      title,
+		Printer:    opts.Settings.Printer,
+		Settings:   js,
+		PageRanges: corePageRanges(opts.Settings.PageRanges),
+		PrintNow:   opts.PrintNow,
+	})
+	if err != nil {
+		return nil, Settings{}, err
+	}
+	warnings = append(warnings, fromWinWarnings(res.Warnings)...)
+	chosen := fromJobSettings(res.Chosen, opts.Settings)
+	chosen.Printer = res.Printer
+	chosen.PageRanges = nil
+	for _, r := range res.PageRanges {
+		chosen.PageRanges = append(chosen.PageRanges, PageRange{From: r.From, To: r.To})
+	}
+	if res.Job == nil {
+		return nil, chosen, nil
+	}
 	return &Job{b: windowsJob{res.Job}, warnings: warnings}, chosen, nil
 }

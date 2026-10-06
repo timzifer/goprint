@@ -52,6 +52,9 @@ type Options struct {
 	// Settings are applied through a DEVMODE converted into the job's
 	// PrintTicket (ignored if Ticket is set).
 	Settings JobSettings
+	// DevMode, if set, is used as is (e.g. from a dialog) instead of
+	// Settings; pages are laid out on its paper.
+	DevMode []byte
 	// Strict fails before spooling if a setting cannot be applied.
 	Strict bool
 	// PageRanges selects pages; empty means all.
@@ -291,7 +294,13 @@ func (j *Job) spool(ctx context.Context, src io.Reader, opts Options) error {
 	defer r.Close()
 
 	var lay paperLayout
-	if len(opts.Ticket) == 0 && !opts.Settings.isZero() {
+	if len(opts.Ticket) == 0 && len(opts.DevMode) > 0 {
+		var err error
+		if opts.Ticket, err = PrintTicket(opts.Printer, opts.DevMode); err != nil {
+			return fmt.Errorf("print ticket: %w", err)
+		}
+		lay = paperLayout{Paper: paperDIPs(opts.Printer, opts.DevMode)}
+	} else if len(opts.Ticket) == 0 && !opts.Settings.isZero() {
 		dm, warns, err := BuildDevMode(opts.Printer, opts.Settings)
 		if err != nil {
 			return err

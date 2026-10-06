@@ -124,3 +124,48 @@ func fromWinWarnings(ws []winprint.Warning) []Warning {
 	}
 	return out
 }
+
+// fromJobSettings maps settings read back from a DEVMODE onto Settings,
+// starting from preset for what DEVMODE does not carry.
+func fromJobSettings(j winprint.JobSettings, preset Settings) Settings {
+	s := preset
+	if j.Copies > 0 {
+		s.Copies = j.Copies
+	}
+	s.Collate = j.Collate
+	if j.PaperWidth > 0 && j.PaperHeight > 0 {
+		s.Media = mediaBySize(j.PaperWidth, j.PaperHeight, "")
+	}
+	switch j.Orientation {
+	case dmOrientPortrait:
+		s.Orientation = Portrait
+	case dmOrientLandscape:
+		s.Orientation = Landscape
+	}
+	switch j.Duplex {
+	case dmDupSimplex:
+		s.Duplex = DuplexNone
+	case dmDupLongEdge:
+		s.Duplex = DuplexLongEdge
+	case dmDupShortEdge:
+		s.Duplex = DuplexShortEdge
+	}
+	switch j.Color {
+	case dmColorColor:
+		s.Color = Color
+	case dmColorMono:
+		s.Color = Monochrome
+	}
+	switch j.Quality {
+	case dmResDraft:
+		s.Quality = QualityDraft
+	case dmResMedium:
+		s.Quality = QualityNormal
+	case dmResHigh:
+		s.Quality = QualityHigh
+	}
+	if j.Tray != "" {
+		s.Tray = j.Tray
+	}
+	return s
+}

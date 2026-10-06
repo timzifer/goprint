@@ -81,7 +81,7 @@ func TestErrorIs(t *testing.T) {
 }
 
 func TestApartment(t *testing.T) {
-	for _, kind := range []ApartmentKind{STA, MTA} {
+	for _, kind := range []ApartmentKind{STA, MTA, OleSTA} {
 		a, err := NewApartment(kind)
 		if err != nil {
 			t.Fatal(err)
