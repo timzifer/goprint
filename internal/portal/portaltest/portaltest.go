@@ -157,7 +157,16 @@ func (p *Portal) PreparePrint(sender dbus.Sender, parent, title string, settings
 	p.mu.Unlock()
 
 	if choose != nil {
-		s, pageSetup = choose(s, pageSetup)
+		// Hand copies to Choose so the recorded presets stay unchanged.
+		sc := make(map[string]string, len(s))
+		for k, v := range s {
+			sc[k] = v
+		}
+		pc := make(map[string]dbus.Variant, len(pageSetup))
+		for k, v := range pageSetup {
+			pc[k] = v
+		}
+		s, pageSetup = choose(sc, pc)
 	}
 	out := map[string]dbus.Variant{}
 	for k, v := range s {
