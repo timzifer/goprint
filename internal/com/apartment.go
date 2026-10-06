@@ -22,6 +22,10 @@ const (
 	STA ApartmentKind = iota
 	// MTA is the multi-threaded apartment (headless work).
 	MTA
+	// OleSTA is a classic single-threaded apartment initialized with
+	// OleInitialize, for comdlg32 dialogs (PrintDlgEx). The STA kind is a
+	// WinRT application STA, which those dialogs do not run in.
+	OleSTA
 )
 
 var (
@@ -33,6 +37,8 @@ var (
 	procDispatchMessageW   = moduser32.NewProc("DispatchMessageW")
 	procPostThreadMessageW = moduser32.NewProc("PostThreadMessageW")
 	procMsgWaitForMultiple = moduser32.NewProc("MsgWaitForMultipleObjectsEx")
+	procOleInitialize      = modole32.NewProc("OleInitialize")
+	procOleUninitialize    = modole32.NewProc("OleUninitialize")
 )
 
 const (
@@ -80,16 +86,26 @@ func (a *Apartment) run(ready chan<- error) {
 	runtime.LockOSThread()
 	defer close(a.done)
 
-	roInit := uintptr(1) // RO_INIT_MULTITHREADED
-	if a.kind == STA {
-		roInit = 0 // RO_INIT_SINGLETHREADED
+	if a.kind == OleSTA {
+		// Classic STA with OLE, as comdlg32 dialogs expect.
+		if r, _, _ := syscall.SyscallN(procOleInitialize.Addr(), 0); int32(r) < 0 {
+			runtime.UnlockOSThread()
+			ready <- HR("OleInitialize", r)
+			return
+		}
+		defer syscall.SyscallN(procOleUninitialize.Addr())
+	} else {
+		roInit := uintptr(1) // RO_INIT_MULTITHREADED
+		if a.kind == STA {
+			roInit = 0 // RO_INIT_SINGLETHREADED (an application STA)
+		}
+		if err := Call(procRoInitialize, roInit); err != nil {
+			runtime.UnlockOSThread()
+			ready <- fmt.Errorf("RoInitialize: %w", err)
+			return
+		}
+		defer syscall.SyscallN(procRoUninitialize.Addr())
 	}
-	if err := Call(procRoInitialize, roInit); err != nil {
-		runtime.UnlockOSThread()
-		ready <- fmt.Errorf("RoInitialize: %w", err)
-		return
-	}
-	defer syscall.SyscallN(procRoUninitialize.Addr())
 
 	// Force creation of the thread's message queue before publishing the id.
 	var m msg

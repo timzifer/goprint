@@ -22,10 +22,10 @@ headless or through the native print dialog.
 >
 > | Feature | Linux/BSD | macOS | Windows |
 > |---|---|---|---|
-> | `Printers`, `GetCapabilities` | ✓ (CUPS) | ✓ (CUPS) | ✓ `Printers` |
-> | `Print` (headless) | ✓ all settings via IPP | ✓ all settings via IPP | ✓ amd64/386 (PDF and images, page ranges; other settings are reported as warnings) |
+> | `Printers`, `GetCapabilities` | ✓ (CUPS) | ✓ (CUPS) | ✓ |
+> | `Print` (headless) | ✓ all settings via IPP | ✓ all settings via IPP | ✓ amd64/386, all settings via DEVMODE/PrintTicket |
 > | IPP Everywhere printer by URI (`Printer: "ipp://…"`) | ✓ | ✓ | ✓ |
-> | `Dialog` | – | – | ✓ amd64/386: modern dialog with live preview; presets/results for copies, media, orientation, duplex, color, collation, quality |
+> | `Dialog` | – | – | ✓ amd64/386: modern dialog with live preview and page selection; classic `PrintDlgEx` for settings-only use |
 >
 > Unimplemented parts return `ErrUnsupported` / `ErrNoDialog`.
 
@@ -61,10 +61,12 @@ if errors.Is(err, goprint.ErrCanceled) {
 }
 ```
 
-On Windows, the modern print dialog cannot preselect a printer, and with
-`DialogOptions.PrintNow == false` a print-to-file printer still asks for a
-file name (the dialog creates the job before goprint can withdraw it). The
-classic dialog, which handles both, is not implemented yet.
+On Windows, the modern print dialog cannot preselect a printer. Windows 11
+also shows the classic dialog (`PrintDlgEx`) as its modern dialog and then
+ignores the preselection, so `DialogOptions.RequirePrinter` returns
+`ErrUnsupported` there. `StyleAuto` uses the modern dialog (with preview)
+for printing and the classic one for `PrintNow == false`, which creates no
+job and so never asks print-to-file printers for a file name.
 
 On Windows, `Settings.Vendor[goprint.VendorOutputFile]` writes the printer
 output to a file instead of the device, e.g. to get a PDF from

@@ -46,3 +46,24 @@ func FuzzParseMedia(f *testing.F) {
 		}
 	})
 }
+
+func TestMediaBySize(t *testing.T) {
+	if m := mediaBySize(210000, 297000, "A4"); m != MediaA4 {
+		t.Errorf("A4 → %+v", m)
+	}
+	if m := mediaBySize(279400, 215900, "Letter Rotated"); m != MediaLetter {
+		t.Errorf("rotated letter → %+v", m)
+	}
+	m := mediaBySize(100000, 150500, "Etikett 100 × 150")
+	if m.Name != "custom_etikett-100-150_100x150.5mm" || m.Width != 100000 || m.Height != 150500 {
+		t.Errorf("custom → %+v", m)
+	}
+	if _, err := ParseMedia(m.Name); err != nil {
+		t.Errorf("custom name not parseable: %v", err)
+	}
+	for _, n := range standardMedia {
+		if _, err := ParseMedia(n); err != nil {
+			t.Errorf("%s: %v", n, err)
+		}
+	}
+}

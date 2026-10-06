@@ -14,6 +14,7 @@ import (
 	"golang.org/x/sys/windows"
 
 	"github.com/timzifer/goprint/internal/com"
+	"github.com/timzifer/goprint/internal/core"
 	"github.com/timzifer/goprint/internal/errdefs"
 )
 
@@ -34,6 +35,9 @@ var (
 	iidIPrintTaskOptionsCore            = com.MustGUID("1bdbb474-4ed1-41eb-be3c-72d18ed67337")
 	iidIPrintTaskOptionsCoreProperties  = com.MustGUID("c1b71832-9e93-4e55-814b-3326a59efce1")
 	iidIPrintDocumentSource             = com.MustGUID("dedc0c30-f1eb-47df-aae6-ed5427511f01")
+	iidIPrintTaskOptions2               = com.MustGUID("eb9b1606-9a36-4b59-8617-b217849262e1")
+	iidIPrintTaskOptionsCoreUIConfig    = com.MustGUID("62e69e23-9a1e-4336-b74f-3cc7f4cff709")
+	iidIStandardPrintTaskOptionsStatic3 = com.MustGUID("bbf68e86-3858-41b3-a799-55dd9888d475")
 	iidIPrintDocumentPageSource         = com.MustGUID("a96bb1db-172e-4667-82b5-ad97a252318f")
 	iidIPrintPreviewPageCollection      = com.MustGUID("0b31cc62-d7ec-4747-9d6e-f2537d870f2b")
 	iidIPrintPreviewDxgiPackageTarget   = com.MustGUID("1a6dd0ad-1e2a-4e99-a5ba-91f17818290e") // also ID_PREVIEWPACKAGETARGET_DXGI
@@ -76,6 +80,22 @@ const (
 	optGetNumberOfCopies = 29
 
 	targetGetPackageTarget = 4
+
+	options2GetPageRangeOptions = 6
+	options2GetCustomPageRanges = 7
+
+	pageRangeOptsPutAllowAllPages         = 6
+	pageRangeOptsPutAllowCustomSetOfPages = 10
+
+	vectorGetAt   = 6
+	vectorGetSize = 7
+	vectorAppend  = 13
+
+	uiConfigGetDisplayedOptions     = 6
+	standardStatic3CustomPageRanges = 6
+
+	pageRangeGetFirst = 6
+	pageRangeGetLast  = 7
 
 	previewSetJobPageCount = 3
 	previewDrawPage        = 4
@@ -204,7 +224,7 @@ var (
 			if !ok {
 				return com.E_FAIL
 			}
-			if err := d.makeDocument((*com.Unknown)(com.Ptr(target))); err != nil {
+			if err := d.makeDocument((*com.Unknown)(com.Ptr(options)), (*com.Unknown)(com.Ptr(target))); err != nil {
 				d.fail(err)
 				return com.E_FAIL
 			}
@@ -393,6 +413,9 @@ func (d *dialog) onTaskRequested(args *com.Unknown) {
 	if err := applyPresets(task, d.opts.Presets); err != nil {
 		d.fail(err)
 	}
+	if err := enablePageRanges(task); err != nil {
+		tracef("page range selection unavailable: %v", err) // older Windows
+	}
 	var token int64
 	if err := task.CallHR("PrintTask.add_Completed", printTaskAddCompleted, d.completedHandler.Ptr(), uintptr(unsafe.Pointer(&token))); err != nil {
 		d.fail(err)
@@ -484,8 +507,94 @@ func readOptions(task *com.Unknown) (TaskOptions, error) {
 	return o, errors.Join(errs...)
 }
 
+// enablePageRanges lets the user pick pages in the dialog (Windows 10 1809+).
+func enablePageRanges(task *com.Unknown) error {
+	var opts *com.Unknown
+	if err := task.CallHR("PrintTask.get_Options", printTaskGetOptions, uintptr(unsafe.Pointer(&opts))); err != nil {
+		return err
+	}
+	defer opts.Release()
+	o2, err := opts.QueryInterface(&iidIPrintTaskOptions2)
+	if err != nil {
+		return err
+	}
+	defer o2.Release()
+	var pro *com.Unknown
+	if err := o2.CallHR("IPrintTaskOptions2.get_PageRangeOptions", options2GetPageRangeOptions, uintptr(unsafe.Pointer(&pro))); err != nil {
+		return err
+	}
+	defer pro.Release()
+	if err := pro.CallHR("put_AllowAllPages", pageRangeOptsPutAllowAllPages, 1); err != nil {
+		return err
+	}
+	if err := pro.CallHR("put_AllowCustomSetOfPages", pageRangeOptsPutAllowCustomSetOfPages, 1); err != nil {
+		return err
+	}
+
+	// The option only shows when listed in DisplayedOptions.
+	statics, err := com.ActivationFactory("Windows.Graphics.Printing.StandardPrintTaskOptions", &iidIStandardPrintTaskOptionsStatic3)
+	if err != nil {
+		return err
+	}
+	defer statics.Release()
+	var name com.HString
+	if err := statics.CallHR("StandardPrintTaskOptions.get_CustomPageRanges", standardStatic3CustomPageRanges, uintptr(unsafe.Pointer(&name))); err != nil {
+		return err
+	}
+	defer name.Delete()
+	ui, err := opts.QueryInterface(&iidIPrintTaskOptionsCoreUIConfig)
+	if err != nil {
+		return err
+	}
+	defer ui.Release()
+	var shown *com.Unknown
+	if err := ui.CallHR("get_DisplayedOptions", uiConfigGetDisplayedOptions, uintptr(unsafe.Pointer(&shown))); err != nil {
+		return err
+	}
+	defer shown.Release()
+	tracef("displaying option %q", name.String())
+	return shown.CallHR("IVector<HSTRING>.Append", vectorAppend, uintptr(name))
+}
+
+// customPageRanges reads the pages the user selected; nil means all.
+func customPageRanges(options *com.Unknown) ([]core.PageRange, error) {
+	if options == nil {
+		return nil, nil
+	}
+	o2, err := options.QueryInterface(&iidIPrintTaskOptions2)
+	if err != nil {
+		return nil, err
+	}
+	defer o2.Release()
+	var vec *com.Unknown
+	if err := o2.CallHR("IPrintTaskOptions2.get_CustomPageRanges", options2GetCustomPageRanges, uintptr(unsafe.Pointer(&vec))); err != nil {
+		return nil, err
+	}
+	defer vec.Release()
+	var n uint32
+	if err := vec.CallHR("IVector.get_Size", vectorGetSize, uintptr(unsafe.Pointer(&n))); err != nil {
+		return nil, err
+	}
+	var out []core.PageRange
+	for i := uint32(0); i < n; i++ {
+		var r *com.Unknown
+		if err := vec.CallHR("IVector.GetAt", vectorGetAt, uintptr(i), uintptr(unsafe.Pointer(&r))); err != nil {
+			return nil, err
+		}
+		var first, last int32
+		err1 := r.CallHR("PrintPageRange.get_FirstPageNumber", pageRangeGetFirst, uintptr(unsafe.Pointer(&first)))
+		err2 := r.CallHR("PrintPageRange.get_LastPageNumber", pageRangeGetLast, uintptr(unsafe.Pointer(&last)))
+		r.Release()
+		if err1 != nil || err2 != nil {
+			return nil, errors.Join(err1, err2)
+		}
+		out = append(out, core.PageRange{From: int(first), To: int(last)})
+	}
+	return out, nil
+}
+
 // makeDocument spools the document into the target the dialog provides.
-func (d *dialog) makeDocument(target *com.Unknown) error {
+func (d *dialog) makeDocument(options, target *com.Unknown) error {
 	tracef("MakeDocument")
 	if !d.opts.PrintNow {
 		target.Call(targetCancel)
@@ -493,6 +602,12 @@ func (d *dialog) makeDocument(target *com.Unknown) error {
 		d.jobErr = errSettingsOnly
 		d.mu.Unlock()
 		return nil
+	}
+	if PrinterGuard != nil {
+		// The dialog does not tell which printer the user picked before the
+		// job exists; refuse rather than risk a real device.
+		target.Call(targetCancel)
+		return fmt.Errorf("winprint: printing from the dialog is disabled by PrinterGuard")
 	}
 	r, err := newRenderer()
 	if err != nil {
@@ -502,11 +617,17 @@ func (d *dialog) makeDocument(target *com.Unknown) error {
 	job := newJob("", d.opts.Title)
 	target.AddRef()
 	job.res.keep(target.Release)
-	pages := make([]int, d.doc.pages)
-	for i := range pages {
-		pages[i] = i
+	ranges, err := customPageRanges(options)
+	if err != nil {
+		tracef("custom page ranges unavailable: %v", err)
 	}
-	err = job.writeTarget(context.Background(), r, d.doc, target, pages, 0)
+	pages, _ := core.SelectPages(ranges, d.doc.pages)
+	if len(pages) == 0 {
+		target.Call(targetCancel)
+		return fmt.Errorf("%w: selected pages are outside the document", errdefs.ErrInvalid)
+	}
+	tracef("MakeDocument: ranges %v → %d pages", ranges, len(pages))
+	err = job.writeTarget(context.Background(), r, d.doc, target, pages, 0, paperLayout{})
 	if err == nil {
 		// The user picked the printer; look it up while the job is still
 		// queued (it may leave the queue quickly).

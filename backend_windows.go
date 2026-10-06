@@ -44,15 +44,18 @@ func (windowsBackend) capabilities(ctx context.Context, printer string) (Capabil
 	if isPrinterURI(printer) {
 		return ippDirect.capabilities(ctx, printer)
 	}
-	// TODO(phase 3): PrintCapabilities via prntvpt.dll.
-	return Capabilities{}, fmt.Errorf("%w: capabilities on windows (not yet implemented)", ErrUnsupported)
+	c, err := winprint.Capabilities(printer)
+	if err != nil {
+		return Capabilities{}, err
+	}
+	return capsFromWin(c), nil
 }
 
 func (windowsBackend) print(ctx context.Context, src io.Reader, doc Document, s Settings) (*Job, error) {
 	if isPrinterURI(s.Printer) {
 		return ippDirect.print(ctx, src, doc, s)
 	}
-	warnings := windowsUnmapped(s)
+	js, warnings := toJobSettings(s)
 	if s.Strict && len(warnings) > 0 {
 		return nil, fmt.Errorf("%w: %s", ErrUnsupported, warnings[0])
 	}
@@ -61,10 +64,13 @@ func (windowsBackend) print(ctx context.Context, src io.Reader, doc Document, s 
 		Title:      doc.Title,
 		OutputFile: s.Vendor[VendorOutputFile],
 		PageRanges: corePageRanges(s.PageRanges),
+		Settings:   js,
+		Strict:     s.Strict,
 	})
 	if err != nil {
 		return nil, err
 	}
+	warnings = append(warnings, fromWinWarnings(j.Warnings())...)
 	if j.PagesClipped() {
 		warnings = append(warnings, Warning{"PageRanges", "ranges exceed the document's page count"})
 	}
@@ -77,31 +83,6 @@ func corePageRanges(rs []PageRange) []core.PageRange {
 		out = append(out, core.PageRange{From: r.From, To: r.To})
 	}
 	return out
-}
-
-// windowsUnmapped reports settings the Windows backend does not apply yet.
-// TODO(phase 3): map them into a PrintTicket.
-func windowsUnmapped(s Settings) []Warning {
-	var w []Warning
-	add := func(cond bool, name string) {
-		if cond {
-			w = append(w, Warning{name, "not yet supported on windows"})
-		}
-	}
-	add(s.Copies > 1, "Copies")
-	add(s.Collate != nil, "Collate")
-	add(s.Media != (Media{}), "Media")
-	add(s.Orientation != OrientationDefault, "Orientation")
-	add(s.Duplex != DuplexDefault, "Duplex")
-	add(s.Color != ColorAuto, "Color")
-	add(s.Quality != QualityDefault, "Quality")
-	add(s.Scaling != ScalingDefault, "Scaling")
-	add(s.Tray != "", "Tray")
-	add(s.Credentials != nil, "Credentials")
-	for k := range s.Vendor {
-		add(k != VendorOutputFile, "Vendor["+k+"]")
-	}
-	return w
 }
 
 type windowsJob struct{ j *winprint.Job }

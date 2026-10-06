@@ -5,12 +5,15 @@ package goprint
 import (
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"image"
 	"image/color"
 	"io"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -85,18 +88,33 @@ func TestWindowsPrintImages(t *testing.T) {
 		img.Set(x, 100, color.Black)
 	}
 	job, out := printToFile(t, Document{Images: []image.Image{img, img}, DPI: 100}, Settings{Copies: 2})
-	if n := countPages(out); n != 2 {
-		t.Errorf("printed %d pages, want 2", n)
+	if n := countPages(out); n != 4 {
+		t.Errorf("printed %d pages, want 4 (2 copies of 2 pages)", n)
 	}
-	if w := job.Warnings(); len(w) != 1 || w[0].Setting != "Copies" {
-		t.Errorf("warnings = %v, want one Copies warning", w)
+	if w := job.Warnings(); len(w) != 0 {
+		t.Errorf("warnings = %v", w)
 	}
 }
 
 func TestWindowsStrict(t *testing.T) {
+	requirePDFPrinter(t)
 	src := testpdf.Generate(1, 100, 100)
 	doc := Document{PDF: func() (io.ReadSeekCloser, error) { return nopCloser{bytes.NewReader(src)}, nil }}
-	if _, err := Print(context.Background(), doc, Settings{Duplex: DuplexLongEdge, Strict: true}); err == nil {
-		t.Fatal("strict print with unsupported setting succeeded")
+	// "Microsoft Print to PDF" cannot print two-sided: Strict must fail
+	// before anything is spooled.
+	_, err := Print(context.Background(), doc, Settings{Printer: pdfPrinter, Duplex: DuplexLongEdge, Strict: true})
+	if !errors.Is(err, ErrUnsupported) {
+		t.Fatalf("strict print = %v, want ErrUnsupported", err)
 	}
+}
+
+func TestMain(m *testing.M) {
+	// Never print on a real device from tests.
+	winprint.PrinterGuard = func(printer string) error {
+		if printer != pdfPrinter && !strings.HasPrefix(printer, "goprint-") {
+			return fmt.Errorf("test tried to print to %q; only %q is allowed", printer, pdfPrinter)
+		}
+		return nil
+	}
+	os.Exit(m.Run())
 }
