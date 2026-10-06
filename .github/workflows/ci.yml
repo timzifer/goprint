@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CGO_ENABLED: "0"
+
+jobs:
+  test:
+    name: test (${{ matrix.os }}, Go ${{ matrix.go }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        go: [stable, oldstable]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ matrix.go }}
+      - name: Test
+        run: go test -count=1 -shuffle=on ./...
+      - name: Test (race)
+        # The race detector needs cgo.
+        env:
+          CGO_ENABLED: "1"
+        run: go test -count=1 -race ./...
+      - name: Fuzz smoke
+        shell: bash
+        run: ./.github/scripts/fuzz.sh 10s
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+      - name: gofmt
+        run: test -z "$(gofmt -l . | tee /dev/stderr)"
+      - name: go mod tidy
+        run: go mod tidy -diff
+      - name: go vet
+        run: |
+          for goos in linux darwin windows freebsd; do
+            echo "::group::GOOS=$goos"; GOOS=$goos go vet ./...; echo "::endgroup::"
+          done
+      - name: staticcheck
+        uses: dominikh/staticcheck-action@v1
+        with:
+          install-go: false
+      - name: govulncheck
+        uses: golang/govulncheck-action@v1
+        with:
+          go-version-input: stable
+
+  cross-compile:
+    name: build ${{ matrix.goos }}/${{ matrix.goarch }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        goos: [linux, freebsd, openbsd, netbsd, darwin, windows]
+        goarch: [amd64, arm64]
+        include:
+          - { goos: windows, goarch: "386" }
+          - { goos: linux, goarch: "386" }
+          - { goos: linux, goarch: arm }
+          - { goos: js, goarch: wasm }
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          go build ./...
+          go test -c -o /dev/null .
