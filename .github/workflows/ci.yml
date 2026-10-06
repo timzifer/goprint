@@ -37,6 +37,9 @@ jobs:
           CGO_ENABLED: "1"
         run: go test -count=1 -race ./...
       - name: Fuzz smoke
+        # Native fuzzing is unreliable on Windows runners (spurious
+        # "context deadline exceeded"); seed corpora still run there via go test.
+        if: runner.os != 'Windows'
         shell: bash
         run: bash .github/scripts/fuzz.sh 10s
 
