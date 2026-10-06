@@ -55,12 +55,12 @@ func portalDoc() Document {
 
 func TestPortalDialogSettingsOnly(t *testing.T) {
 	p := portaltest.Start(t)
-	p.Choose = func(s map[string]string, ps map[string]dbus.Variant) (map[string]string, map[string]dbus.Variant) {
+	p.SetChoose(func(s map[string]string, ps map[string]dbus.Variant) (map[string]string, map[string]dbus.Variant) {
 		s["printer"] = "Chosen"
 		s["n-copies"] = "4"
 		ps["Orientation"] = dbus.MakeVariant("portrait")
 		return s, ps
-	}
+	})
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	job, chosen, err := Dialog(ctx, portalDoc(), DialogOptions{
@@ -133,10 +133,10 @@ func TestPortalDialogCancel(t *testing.T) {
 
 func TestPortalRequirePrinter(t *testing.T) {
 	p := portaltest.Start(t)
-	p.Choose = func(s map[string]string, ps map[string]dbus.Variant) (map[string]string, map[string]dbus.Variant) {
+	p.SetChoose(func(s map[string]string, ps map[string]dbus.Variant) (map[string]string, map[string]dbus.Variant) {
 		s["printer"] = "Other"
 		return s, ps
-	}
+	})
 	_, _, err := Dialog(context.Background(), portalDoc(), DialogOptions{Settings: Settings{Printer: "Office"}, RequirePrinter: true, PrintNow: true})
 	if !errors.Is(err, ErrUnsupported) {
 		t.Fatalf("err = %v, want ErrUnsupported", err)

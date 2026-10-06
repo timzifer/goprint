@@ -18,17 +18,17 @@ import (
 	"github.com/godbus/dbus/v5"
 )
 
-// Portal is a fake print portal. Configure its fields before the code under
-// test calls it.
+// Portal is a fake print portal. Configure it with SetResponse and
+// SetChoose; it is called from D-Bus goroutines.
 type Portal struct {
 	mu   sync.Mutex
 	conn *dbus.Conn
 
 	// Response is the response code sent for PreparePrint (0 success,
-	// 1 cancelled, 2 other).
+	// 1 cancelled, 2 other). Set it with SetResponse.
 	Response uint32
 	// Choose, if set, turns the preset settings into the "user's choice".
-	// By default the presets are returned unchanged.
+	// By default the presets are returned unchanged. Set it with SetChoose.
 	Choose func(settings map[string]string, pageSetup map[string]dbus.Variant) (map[string]string, map[string]dbus.Variant)
 
 	// Recorded calls.
@@ -206,6 +206,13 @@ func (p *Portal) Calls() ([]Prepared, []Printed) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return append([]Prepared(nil), p.Prepared...), append([]Printed(nil), p.Printed...)
+}
+
+// SetChoose sets the function that turns presets into the user's choice.
+func (p *Portal) SetChoose(f func(settings map[string]string, pageSetup map[string]dbus.Variant) (map[string]string, map[string]dbus.Variant)) {
+	p.mu.Lock()
+	p.Choose = f
+	p.mu.Unlock()
 }
 
 // SetResponse sets the PreparePrint response code.
