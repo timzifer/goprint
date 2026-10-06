@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -57,7 +58,8 @@ func TestCUPSPrintToPDF(t *testing.T) {
 		{"page range", Settings{PageRanges: []PageRange{{2, 3}}}, 2},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			title := "goprint-" + strings.ReplaceAll(tc.name, " ", "-") + "-" + time.Now().Format("150405.000")
+			// cups-pdf keeps only [A-Za-z0-9-_] of the title in the file name.
+			title := "goprint-" + strings.ReplaceAll(tc.name, " ", "-") + "-" + strconv.FormatInt(time.Now().UnixNano()%1e9, 10)
 			src := testpdf.Generate(3, testpdf.A4Width, testpdf.A4Height)
 			tc.s.Printer = queue
 			job, err := Print(ctx, Document{Title: title, PDF: func() (io.ReadSeekCloser, error) { return nopCloser{bytes.NewReader(src)}, nil }}, tc.s)
