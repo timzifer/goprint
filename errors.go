@@ -1,20 +1,21 @@
 package goprint
 
 import (
-	"errors"
 	"fmt"
+
+	"github.com/timzifer/goprint/internal/errdefs"
 )
 
 // Sentinel errors. Detailed errors wrap them and are reachable via errors.Is.
 var (
-	ErrCanceled        = errors.New("goprint: canceled by user")
-	ErrNoPrinter       = errors.New("goprint: no printer available")
-	ErrPrinterNotFound = errors.New("goprint: printer not found")
-	ErrUnsupported     = errors.New("goprint: not supported on this platform")
-	ErrNoDialog        = errors.New("goprint: no print dialog available")
-	ErrWrongThread     = errors.New("goprint: must be called on the main thread")
-	ErrBusy            = errors.New("goprint: busy")
-	ErrInvalid         = errors.New("goprint: invalid argument")
+	ErrCanceled        = errdefs.ErrCanceled
+	ErrNoPrinter       = errdefs.ErrNoPrinter
+	ErrPrinterNotFound = errdefs.ErrPrinterNotFound
+	ErrUnsupported     = errdefs.ErrUnsupported
+	ErrNoDialog        = errdefs.ErrNoDialog
+	ErrWrongThread     = errdefs.ErrWrongThread
+	ErrBusy            = errdefs.ErrBusy
+	ErrInvalid         = errdefs.ErrInvalid
 )
 
 func invalidf(format string, args ...any) error {
