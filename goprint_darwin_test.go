@@ -114,7 +114,7 @@ func TestMacPrintToFile(t *testing.T) {
 					t.Errorf("page %d is %.2fx%.2f pt, want %.2fx%.2f", i+1, p[0], p[1], tt.w, tt.h)
 				}
 			}
-			t.Logf("chosen: %+v", chosen)
+			t.Logf("output: %d pages, MediaBox sizes %v; read back: media %v, orientation %v, pages %v, copies %d", len(pages), pages, chosen.Media, chosen.Orientation, chosen.PageRanges, chosen.Copies)
 			if chosen.Media != tt.media {
 				t.Errorf("read back media %v, want %v", chosen.Media, tt.media)
 			}
