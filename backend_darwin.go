@@ -4,6 +4,6 @@ package goprint
 
 import "github.com/timzifer/goprint/ipp"
 
-// macOS prints through CUPS as well; headless uses the same IPP code as
-// Linux. TODO(phase 4): dialog via NSPrintOperation (purego).
-var platform backend = ippBackend{newClient: ipp.NewCUPSClient}
+// macOS prints headless through CUPS with the same IPP code as Linux; the
+// dialog is the AppKit print panel with PDFKit preview (dialog_darwin.go).
+var platform backend = darwinBackend{ippBackend{newClient: ipp.NewCUPSClient}}
