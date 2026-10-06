@@ -235,7 +235,8 @@ func TestCUPSServer(t *testing.T) {
 		env   string
 		want  string
 	}{
-		{"run", map[string]fs.FileMode{"/run/cups/cups.sock": fs.ModeSocket, "/var/run/cups/cups.sock": fs.ModeSocket}, "h", "/run/cups/cups.sock"},
+		{"run", map[string]fs.FileMode{"/run/cups/cups.sock": fs.ModeSocket, "/var/run/cups/cups.sock": fs.ModeSocket}, "", "/run/cups/cups.sock"},
+		{"env wins over socket", map[string]fs.FileMode{"/run/cups/cups.sock": fs.ModeSocket}, "h", "ipp://h"},
 		{"var run", map[string]fs.FileMode{"/var/run/cups/cups.sock": fs.ModeSocket}, "", "/var/run/cups/cups.sock"},
 		{"macOS", map[string]fs.FileMode{"/private/var/run/cupsd": fs.ModeSocket}, "", "/private/var/run/cupsd"},
 		{"not a socket", map[string]fs.FileMode{"/run/cups/cups.sock": 0}, "", "ipp://localhost:631"},

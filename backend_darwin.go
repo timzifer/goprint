@@ -2,5 +2,8 @@
 
 package goprint
 
-// TODO(phase 2/4): IPP against local CUPS, dialog via NSPrintOperation (purego).
-var platform backend = unsupported{goos: "darwin"}
+import "github.com/timzifer/goprint/ipp"
+
+// macOS prints through CUPS as well; headless uses the same IPP code as
+// Linux. TODO(phase 4): dialog via NSPrintOperation (purego).
+var platform backend = ippBackend{newClient: ipp.NewCUPSClient}
