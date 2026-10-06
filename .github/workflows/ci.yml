@@ -30,7 +30,15 @@ jobs:
         with:
           go-version: ${{ matrix.go }}
       - name: Test
-        run: go test -count=1 -shuffle=on ./...
+        run: go test -count=1 -shuffle=on -p 1 ./...
+      - name: DIAG print stress
+        if: runner.os == 'Windows'
+        shell: bash
+        env:
+          GOPRINT_STRESS: "10"
+        run: |
+          go test -count=1 -v -run Concurrent ./internal/winprint/ || true
+          powershell -c "Get-Printer | ft Name,DriverName,PortName -auto; Get-PrinterPort | ft Name,Description -auto; Get-Service Spooler" 
       - name: Test (race)
         # The race detector needs cgo.
         env:
