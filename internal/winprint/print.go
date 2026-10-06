@@ -4,8 +4,10 @@ package winprint
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"os"
 	"runtime"
 	"strconv"
 	"sync"
@@ -136,6 +138,7 @@ var statusSinkVTable = com.NewVTable(
 // Job is a spooled print job.
 type Job struct {
 	printer string
+	output  string // print-to-file target, verified when the job is done
 	sink    *statusSink
 
 	clipped  bool      // page ranges exceeded the document
@@ -228,7 +231,7 @@ func Print(ctx context.Context, src io.Reader, opts Options) (*Job, error) {
 	if err != nil {
 		return nil, err
 	}
-	job := &Job{printer: opts.Printer, sink: &statusSink{update: make(chan struct{}, 1)}, res: &resources{}}
+	job := &Job{printer: opts.Printer, output: opts.OutputFile, sink: &statusSink{update: make(chan struct{}, 1)}, res: &resources{}}
 	err = a.Do(ctx, func() error { return job.spool(ctx, src, opts) })
 	if err != nil {
 		job.res.release()
@@ -423,7 +426,9 @@ func (j *Job) spoolerID() uint32 {
 // spooler queue.
 func (j *Job) State(ctx context.Context) (State, error) {
 	st, err := j.state(ctx)
-	if err == nil && st >= StateCompleted {
+	// A print-to-file job may still receive data after it left the queue;
+	// Wait releases those resources once the output is verified.
+	if err == nil && st >= StateCompleted && j.output == "" {
 		j.res.release()
 	}
 	return st, err
@@ -499,10 +504,14 @@ func (j *Job) Wait(ctx context.Context) error {
 		}
 		switch s {
 		case StateCompleted:
-			return nil
+			err := j.verifyOutput(ctx)
+			j.res.release()
+			return err
 		case StateCanceled:
+			j.res.release()
 			return errdefs.ErrCanceled
 		case StateAborted:
+			j.res.release()
 			return fmt.Errorf("winprint: job %s aborted", j.ID())
 		}
 		select {
@@ -510,6 +519,36 @@ func (j *Job) Wait(ctx context.Context) error {
 			return ctx.Err()
 		case <-t.C:
 		case <-j.sink.update:
+		}
+	}
+}
+
+// outputGrace is how long Wait waits for a print-to-file output to appear
+// after the spooler reported the job as done.
+const outputGrace = 10 * time.Second
+
+// ErrOutputMissing is returned by Wait when a print-to-file job completed
+// but its output file stayed empty.
+var ErrOutputMissing = errors.New("winprint: job completed but output file is empty")
+
+// verifyOutput makes sure a print-to-file job produced output, so that a
+// lost output never looks like success.
+func (j *Job) verifyOutput(ctx context.Context) error {
+	if j.output == "" {
+		return nil
+	}
+	deadline := time.Now().Add(outputGrace)
+	for {
+		if fi, err := os.Stat(j.output); err == nil && fi.Size() > 0 {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("%w: %s", ErrOutputMissing, j.output)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(100 * time.Millisecond):
 		}
 	}
 }
