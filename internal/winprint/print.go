@@ -276,7 +276,7 @@ func (j *Job) spool(ctx context.Context, src io.Reader, opts Options) error {
 	if err != nil {
 		return err
 	}
-	defer factory.Release()
+	j.res.keep(factory.Release)
 
 	printer, err := utf16(opts.Printer)
 	if err != nil {
@@ -291,7 +291,9 @@ func (j *Job) spool(ctx context.Context, src io.Reader, opts Options) error {
 		uintptr(unsafe.Pointer(printer)), uintptr(unsafe.Pointer(title)), streamPtr(output), streamPtr(ticket), uintptr(unsafe.Pointer(&target))); err != nil {
 		return err
 	}
-	defer target.Release()
+	// The spooler may keep using the target (and the output stream behind
+	// it) after Close returns; release it only once the job is final.
+	j.res.keep(target.Release)
 
 	// The subscription outlives spool: the event carrying the spooler job id
 	// may arrive late.
