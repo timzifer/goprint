@@ -2,13 +2,16 @@
 
 package winprint
 
-import "math"
+import (
+	"math"
 
-// On amd64 an 8-byte struct passed by value travels in one integer register.
-const addPageSupported = true
+	"github.com/timzifer/goprint/internal/com"
+)
 
-func sizeArgs(s size) []uintptr {
-	return []uintptr{uintptr(math.Float32bits(s.H))<<32 | uintptr(math.Float32bits(s.W))}
+// sizeArg passes a D2D_SIZE_F by value. On amd64 an 8-byte struct travels
+// in one integer register.
+func sizeArg(s size) []com.Arg {
+	return []com.Arg{com.I(uintptr(math.Float32bits(s.H))<<32 | uintptr(math.Float32bits(s.W)))}
 }
 
 // tokenArgs passes an EventRegistrationToken (int64) by value.
