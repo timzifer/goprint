@@ -266,6 +266,10 @@ func Print(ctx context.Context, src io.Reader, opts Options) (*Job, error) {
 	}
 	job := newJob(opts.Printer, opts.Title)
 	job.output = opts.OutputFile
+	if job.output != "" {
+		// Held until Wait has verified the output (or the job is released).
+		job.res.keep(printToFileLock(ctx))
+	}
 	err = a.Do(ctx, func() error { return job.spool(ctx, src, opts) })
 	if err != nil {
 		job.res.release()
