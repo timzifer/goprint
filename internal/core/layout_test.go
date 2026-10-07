@@ -26,3 +26,29 @@ func TestLayout(t *testing.T) {
 		}
 	}
 }
+
+func FuzzLayout(f *testing.F) {
+	f.Add(595.0, 842.0, 842.0, 595.0, 0)
+	f.Add(1.0, 1.0, 1000.0, 1.0, 1)
+	f.Fuzz(func(t *testing.T, pw, ph, qw, qh float64, mode int) {
+		for _, v := range []float64{pw, ph, qw, qh} {
+			if !(v > 0.01 && v < 1e6) {
+				return
+			}
+		}
+		mode = ((mode % 4) + 4) % 4
+		s, dx, dy := Layout(pw, ph, qw, qh, mode)
+		if !(s > 0) || math.IsInf(s, 0) || math.IsNaN(dx) || math.IsNaN(dy) {
+			t.Fatalf("Layout(%v,%v,%v,%v,%d) = %v,%v,%v", pw, ph, qw, qh, mode, s, dx, dy)
+		}
+		const eps = 1e-6
+		if mode == ScaleFit || mode == ScaleAuto {
+			if pw*s > qw*(1+eps) || ph*s > qh*(1+eps) {
+				t.Fatalf("mode %d: scaled page %vx%v exceeds paper %vx%v", mode, pw*s, ph*s, qw, qh)
+			}
+		}
+		if mode == ScaleFill && (pw*s < qw*(1-eps) || ph*s < qh*(1-eps)) {
+			t.Fatalf("fill leaves paper uncovered")
+		}
+	})
+}

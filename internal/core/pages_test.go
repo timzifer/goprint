@@ -26,3 +26,30 @@ func TestSelectPages(t *testing.T) {
 		}
 	}
 }
+
+func FuzzSelectPages(f *testing.F) {
+	f.Add(1, 3, 5, 0, 10)
+	f.Add(0, 0, 0, 0, 0)
+	f.Add(7, 2, 3, 9, 4)
+	f.Fuzz(func(t *testing.T, a, b, c, d, n int) {
+		if n < 0 || n > 10000 {
+			return
+		}
+		var ranges []PageRange
+		// Only valid ranges reach SelectPages (Settings.validate).
+		for _, r := range []PageRange{{a, b}, {c, d}} {
+			if r.From >= 1 && r.From <= 1e6 && (r.To == 0 || (r.To >= r.From && r.To <= 1e6)) {
+				ranges = append(ranges, r)
+			}
+		}
+		pages, _ := SelectPages(ranges, n)
+		for _, p := range pages {
+			if p < 0 || p >= n {
+				t.Fatalf("SelectPages(%v, %d) yields page index %d", ranges, n, p)
+			}
+		}
+		if len(ranges) == 0 && len(pages) != n {
+			t.Fatalf("no ranges: %d pages, want %d", len(pages), n)
+		}
+	})
+}

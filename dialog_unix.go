@@ -300,6 +300,9 @@ func parseGTKRanges(s string) []PageRange {
 				continue
 			}
 		}
+		if from < 0 || to < from {
+			continue // not a valid range; drop rather than pass it on
+		}
 		r := PageRange{From: from + 1, To: to + 1}
 		if to >= 1<<30-1 {
 			r.To = 0
