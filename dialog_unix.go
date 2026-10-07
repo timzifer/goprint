@@ -21,10 +21,6 @@ type unixBackend struct {
 	ippBackend
 }
 
-// VendorGTKPrefix marks Settings.Vendor keys passed to the print portal as
-// GTK print settings, e.g. Vendor["gtk:output-bin"] = "top".
-const VendorGTKPrefix = "gtk:"
-
 func (b unixBackend) dialog(ctx context.Context, doc Document, opts DialogOptions) (*Job, Settings, error) {
 	if opts.Style == StyleClassic {
 		return nil, Settings{}, fmt.Errorf("%w: StyleClassic is windows-only", ErrUnsupported)

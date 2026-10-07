@@ -28,6 +28,21 @@ type Settings struct {
 	Credentials *Credentials
 }
 
+// Settings.Vendor keys with platform-specific meaning. They are defined on
+// every platform so that portable code compiles everywhere; backends that do
+// not know a key report it as a warning.
+const (
+	// VendorOutputFile (Windows): the printer output is written to this file
+	// instead of the device (print to file). With "Microsoft Print to PDF"
+	// this yields a PDF without the save dialog.
+	VendorOutputFile = "windows:output-file"
+
+	// VendorGTKPrefix (Linux/BSD dialog) marks keys passed to the print
+	// portal as GTK print settings, e.g. Vendor["gtk:output-bin"] = "top".
+	// On the IPP path, keys without a namespace are sent as IPP attributes.
+	VendorGTKPrefix = "gtk:"
+)
+
 // Credentials for authenticated print queues.
 type Credentials struct {
 	Username string
