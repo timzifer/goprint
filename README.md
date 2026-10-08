@@ -96,6 +96,14 @@ On Windows, `Settings.Vendor[goprint.VendorOutputFile]` writes the printer
 output to a file instead of the device, e.g. to get a PDF from
 "Microsoft Print to PDF" without its save dialog.
 
+On Windows, `goprint.PrinterProperties` opens the printer driver's own settings
+dialog ("Printing preferences") for what `Settings` has no field for:
+finishing, stapling, secure print and so on. It returns the settings with the
+user's choices; the driver's part travels as
+`Settings.Vendor[goprint.VendorDevMode]` (a base64 DEVMODE) to `Print`, which
+applies the other settings on top. The classic dialog returns it too. Apps can
+store it to reuse the choice later, but only for the same printer.
+
 ### macOS: main thread
 
 AppKit runs only on the main thread. Lock the main goroutine to it in an

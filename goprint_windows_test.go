@@ -10,6 +10,7 @@ import (
 	"image"
 	"image/color"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -45,7 +46,11 @@ func printToFile(t *testing.T, doc Document, s Settings) (*Job, []byte) {
 	winprint.Tracef = t.Logf
 	defer func() { winprint.Tracef = nil }()
 	s.Printer = pdfPrinter
-	s.Vendor = map[string]string{VendorOutputFile: out}
+	s.Vendor = maps.Clone(s.Vendor)
+	if s.Vendor == nil {
+		s.Vendor = map[string]string{}
+	}
+	s.Vendor[VendorOutputFile] = out
 	job, err := Print(ctx, doc, s)
 	if err != nil {
 		t.Fatalf("Print: %v", err)
@@ -105,6 +110,45 @@ func TestWindowsStrict(t *testing.T) {
 	_, err := Print(context.Background(), doc, Settings{Printer: pdfPrinter, Duplex: DuplexLongEdge, Strict: true})
 	if !errors.Is(err, ErrUnsupported) {
 		t.Fatalf("strict print = %v, want ErrUnsupported", err)
+	}
+}
+
+// TestWindowsVendorDevMode prints from a DEVMODE passed in Settings.Vendor,
+// as PrinterProperties returns it.
+func TestWindowsVendorDevMode(t *testing.T) {
+	requirePDFPrinter(t)
+	dm, _, err := winprint.BuildDevMode(pdfPrinter, winprint.JobSettings{PaperWidth: 148000, PaperHeight: 210000, Orientation: dmOrientLandscape})
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := PDFBytes("devmode", testpdf.Generate(1, testpdf.A4Width, testpdf.A4Height))
+	job, data := printToFile(t, doc, withDevMode(Settings{}, dm))
+	if w := job.Warnings(); len(w) > 0 {
+		t.Errorf("warnings = %v", w)
+	}
+	m := regexp.MustCompile(`/MediaBox\s*\[\s*0(?:\.0)?\s+0(?:\.0)?\s+([\d.]+)\s+([\d.]+)`).FindSubmatch(data)
+	if m == nil || !strings.HasPrefix(string(m[1]), "595") || !strings.HasPrefix(string(m[2]), "419") {
+		t.Errorf("MediaBox %q, want A5 landscape (595 x 419)", m)
+	}
+
+	job, _ = printToFile(t, doc, Settings{Vendor: map[string]string{VendorDevMode: "not base64!"}})
+	if w := job.Warnings(); len(w) != 1 || w[0].Setting != "Vendor["+VendorDevMode+"]" {
+		t.Errorf("invalid DEVMODE: warnings = %v", w)
+	}
+}
+
+func TestWindowsDriverDialog(t *testing.T) {
+	requirePDFPrinter(t)
+	c, err := GetCapabilities(context.Background(), pdfPrinter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.DriverDialog {
+		t.Error("DriverDialog = false")
+	}
+	// No UI: IPP printers have no driver dialog.
+	if _, err := PrinterProperties(context.Background(), Settings{Printer: "ipp://localhost/ipp/print"}, 0); !errors.Is(err, ErrUnsupported) {
+		t.Errorf("PrinterProperties(ipp) = %v, want ErrUnsupported", err)
 	}
 }
 

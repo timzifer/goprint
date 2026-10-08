@@ -27,3 +27,7 @@ func (u unsupported) print(context.Context, io.Reader, Document, Settings) (*Job
 func (u unsupported) dialog(context.Context, Document, DialogOptions) (*Job, Settings, error) {
 	return nil, Settings{}, u.err()
 }
+
+func (u unsupported) properties(context.Context, Settings, uintptr) (Settings, error) {
+	return Settings{}, u.err()
+}

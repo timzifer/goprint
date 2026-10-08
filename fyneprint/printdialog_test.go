@@ -185,17 +185,23 @@ type fakePrinters struct {
 func stubPrinters(t *testing.T, list []goprint.Printer) *fakePrinters {
 	t.Helper()
 	f := &fakePrinters{}
-	savedPrinters, savedCaps, savedPrint, savedAsync := printersFunc, capsFunc, printFunc, runAsync
+	savedPrinters, savedCaps, savedPrint, savedProps, savedAsync := printersFunc, capsFunc, printFunc, propertiesFunc, runAsync
 	printersFunc = func(context.Context) ([]goprint.Printer, error) { return list, nil }
 	capsFunc = func(_ context.Context, name string) (goprint.Capabilities, error) {
-		return goprint.Capabilities{Media: []goprint.Media{goprint.MediaA4, goprint.MediaA5}, Duplex: name == "Office", Color: true}, nil
+		return goprint.Capabilities{Media: []goprint.Media{goprint.MediaA4, goprint.MediaA5}, Duplex: name == "Office", Color: true, DriverDialog: name == "Office"}, nil
+	}
+	propertiesFunc = func(context.Context, goprint.Settings, uintptr) (goprint.Settings, error) {
+		t.Fatal("unexpected driver dialog")
+		return goprint.Settings{}, nil
 	}
 	printFunc = func(_ context.Context, _ goprint.Document, s goprint.Settings) (*goprint.Job, error) {
 		f.printed = append(f.printed, s)
 		return nil, nil
 	}
 	runAsync = func(f func()) { f() }
-	t.Cleanup(func() { printersFunc, capsFunc, printFunc, runAsync = savedPrinters, savedCaps, savedPrint, savedAsync })
+	t.Cleanup(func() {
+		printersFunc, capsFunc, printFunc, propertiesFunc, runAsync = savedPrinters, savedCaps, savedPrint, savedProps, savedAsync
+	})
 	return f
 }
 
@@ -268,6 +274,76 @@ func TestPrintDialogPrints(t *testing.T) {
 	}
 	if !reflect.DeepEqual(r.s, s) {
 		t.Errorf("reported %+v", r.s)
+	}
+}
+
+func TestPrintDialogProperties(t *testing.T) {
+	f := stubPrinters(t, testPrinters)
+	d, r := openTestDialog(t, a4Doc(3), PrintDialogOptions{PrintNow: true})
+	if !d.props.Visible() {
+		t.Fatal("no properties button for a printer with a driver dialog")
+	}
+	d.ranges.SetText("2-3")
+
+	var asked []goprint.Settings
+	reply := func(s goprint.Settings) (goprint.Settings, error) {
+		s.Media, s.Orientation, s.Duplex, s.Copies = goprint.MediaA5, goprint.Landscape, goprint.DuplexShortEdge, 3
+		s.Vendor = map[string]string{goprint.VendorDevMode: "AAAA"}
+		return s, nil
+	}
+	propertiesFunc = func(_ context.Context, s goprint.Settings, _ uintptr) (goprint.Settings, error) {
+		asked = append(asked, s)
+		if len(asked) == 2 {
+			return goprint.Settings{}, goprint.ErrCanceled
+		}
+		return reply(s)
+	}
+	test.Tap(d.props)
+	if len(asked) != 1 || asked[0].Printer != "Office" {
+		t.Fatalf("driver dialog asked with %+v", asked)
+	}
+	if d.currentMedia() != goprint.MediaA5 || d.orientation.SelectedIndex() != int(goprint.Landscape) ||
+		d.duplex.SelectedIndex() != int(goprint.DuplexShortEdge) || d.copies.Text != "3" || d.ranges.Text != "2-3" {
+		t.Errorf("controls not updated: paper %v, orientation %d, duplex %d, copies %q, ranges %q",
+			d.currentMedia(), d.orientation.SelectedIndex(), d.duplex.SelectedIndex(), d.copies.Text, d.ranges.Text)
+	}
+	if b := d.sheet.Image.Bounds(); b.Dx() <= b.Dy() {
+		t.Errorf("landscape preview is %v", b)
+	}
+
+	// Canceling the driver dialog keeps everything.
+	test.Tap(d.props)
+	if d.orientation.SelectedIndex() != int(goprint.Landscape) || d.s.Vendor[goprint.VendorDevMode] != "AAAA" || d.ok.Disabled() {
+		t.Errorf("cancel changed the settings: %+v", d.s)
+	}
+
+	test.Tap(d.ok)
+	if !r.called || r.err != nil || len(f.printed) != 1 {
+		t.Fatalf("done %+v, printed %d", r, len(f.printed))
+	}
+	s := f.printed[0]
+	if s.Vendor[goprint.VendorDevMode] != "AAAA" || s.Media != goprint.MediaA5 || s.Copies != 3 || len(s.PageRanges) != 1 {
+		t.Errorf("printed with %+v", s)
+	}
+}
+
+func TestPrintDialogPropertiesOtherPrinter(t *testing.T) {
+	stubPrinters(t, testPrinters)
+	dm := map[string]string{goprint.VendorDevMode: "AAAA", "other": "1"}
+	d, r := openTestDialog(t, a4Doc(1), PrintDialogOptions{Settings: goprint.Settings{Printer: "Office", Vendor: dm}})
+	if d.s.Vendor[goprint.VendorDevMode] != "AAAA" {
+		t.Fatal("preset DEVMODE dropped for its own printer")
+	}
+	d.printer.SetSelected("Lab")
+	if d.props.Visible() {
+		t.Error("properties button shown for a printer without driver dialog")
+	}
+	test.Tap(d.ok)
+	if _, ok := r.s.Vendor[goprint.VendorDevMode]; ok || r.s.Vendor["other"] != "1" {
+		t.Errorf("vendor values after switching printers: %v", r.s.Vendor)
+	}
+	if len(dm) != 2 {
+		t.Errorf("caller's map changed: %v", dm)
 	}
 }
 

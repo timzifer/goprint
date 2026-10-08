@@ -40,6 +40,9 @@ type Capabilities struct {
 	Formats []string
 	// DialogPreview reports whether the native dialog shows a print preview.
 	DialogPreview bool
+	// DriverDialog reports whether [PrinterProperties] can show the
+	// driver's own settings dialog for the printer.
+	DriverDialog bool
 }
 
 // Resolution is a printer resolution in dots per inch.
@@ -72,6 +75,23 @@ func Print(ctx context.Context, doc Document, s Settings) (*Job, error) {
 	}
 	defer src.Close()
 	return platform.print(ctx, src, doc, s)
+}
+
+// PrinterProperties shows the printer driver's own settings dialog
+// ("Printing preferences" on Windows) for s.Printer (empty: the default
+// printer), preset with s, and returns s with the user's choices. The
+// standard settings are read back into their fields; everything else the
+// driver offers travels in s.Vendor[VendorDevMode] to [Print]. owner is
+// the parent window as in [DialogOptions.Owner].
+//
+// It blocks until the dialog closes and returns [ErrCanceled] if the user
+// cancels. Only Windows printers have such a dialog
+// ([Capabilities.DriverDialog]); elsewhere it returns [ErrUnsupported].
+func PrinterProperties(ctx context.Context, s Settings, owner uintptr) (Settings, error) {
+	if err := s.validate(); err != nil {
+		return Settings{}, err
+	}
+	return platform.properties(ctx, s, owner)
 }
 
 // DialogStyle selects the native dialog on platforms that offer several.

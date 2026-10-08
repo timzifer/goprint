@@ -8,6 +8,7 @@
   "fyneprint.duplex": "Beidseitig",
   "fyneprint.color": "Farbe",
   "fyneprint.printer": "Drucker",
+  "fyneprint.properties": "Eigenschaften…",
   "fyneprint.printer.default": "{{.Name}} (Standard)",
   "fyneprint.copies": "Kopien",
   "fyneprint.paper": "Papierformat",

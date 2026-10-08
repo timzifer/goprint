@@ -41,6 +41,14 @@ const (
 	// portal as GTK print settings, e.g. Vendor["gtk:output-bin"] = "top".
 	// On the IPP path, keys without a namespace are sent as IPP attributes.
 	VendorGTKPrefix = "gtk:"
+
+	// VendorDevMode (Windows) is the printer's DEVMODE in standard base64,
+	// as returned by [PrinterProperties] and the classic dialog. It carries
+	// what the driver's own dialog offers (finishing, stapling, secure
+	// print, ...). [Print] starts from it instead of the printer's defaults
+	// and applies the other settings on top. It only applies to the printer
+	// it was made for; on another printer it is ignored with a warning.
+	VendorDevMode = "windows:devmode"
 )
 
 // Credentials for authenticated print queues.

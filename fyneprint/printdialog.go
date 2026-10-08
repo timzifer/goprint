@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -30,7 +31,9 @@ import (
 type PrintDialogOptions struct {
 	// Settings are the presets shown in the dialog, the printer included.
 	// Settings the dialog has no control for (quality, tray, vendor
-	// values, credentials, strict) are passed through unchanged.
+	// values, credentials, strict) are passed through unchanged, except
+	// that the driver's settings (Vendor[goprint.VendorDevMode]) are
+	// dropped when the user picks another printer.
 	Settings goprint.Settings
 	// RequirePrinter makes the dialog fail with goprint.ErrPrinterNotFound
 	// if Settings.Printer does not exist, instead of falling back to the
@@ -73,6 +76,8 @@ var (
 	printersFunc = goprint.Printers
 	capsFunc     = goprint.GetCapabilities
 	printFunc    = goprint.Print
+	// propertiesFunc shows the driver's dialog.
+	propertiesFunc = goprint.PrinterProperties
 	// runAsync runs blocking work off the UI goroutine.
 	runAsync = func(f func()) { go f() }
 )
@@ -86,6 +91,11 @@ var (
 //
 // The save button writes the selected pages as PDF and reports
 // [ErrSavedAsPDF]. Cancel reports goprint.ErrCanceled. done may be nil.
+//
+// For printers with a driver dialog (Windows, see
+// [goprint.PrinterProperties]) a "Properties…" button next to the printer
+// opens it. What the user chooses there is printed along, also driver
+// options the dialog itself has no control for.
 //
 // Call it on Fyne's UI goroutine, e.g. from a widget callback.
 func ShowPrintDialog(w fyne.Window, doc goprint.Document, opts PrintDialogOptions, done func(*goprint.Job, goprint.Settings, error)) {
@@ -136,12 +146,14 @@ type printDialog struct {
 	form                                                *widget.Form
 	sheet                                               *canvas.Image
 	pageLabel, status                                   *widget.Label
-	prev, next, save, ok                                *widget.Button
+	prev, next, save, ok, props                         *widget.Button
 }
 
 func (d *printDialog) build() {
 	d.printer = widget.NewSelect(nil, func(string) { d.printerChanged() })
 	d.printer.PlaceHolder = tr("loading", "Loading printers…")
+	d.props = widget.NewButton(tr("properties", "Properties…"), d.showProperties)
+	d.props.Hide()
 	d.copies = widget.NewEntry()
 	d.copies.SetText(strconv.Itoa(max(d.s.Copies, 1)))
 	d.copies.Validator = func(s string) error {
@@ -186,7 +198,7 @@ func (d *printDialog) build() {
 	d.colorItem = widget.NewFormItem(tr("color", "Color"), d.color)
 
 	d.items = []*widget.FormItem{
-		widget.NewFormItem(tr("printer", "Printer"), d.printer),
+		widget.NewFormItem(tr("printer", "Printer"), container.NewBorder(nil, nil, nil, d.props, d.printer)),
 		widget.NewFormItem(tr("copies", "Copies"), container.NewBorder(nil, nil, nil, d.collate, d.copies)),
 		widget.NewFormItem(tr("pages", "Pages"), container.NewBorder(nil, nil, d.allPages, nil, d.ranges)),
 		widget.NewFormItem(tr("paper", "Paper size"), d.paper),
@@ -349,7 +361,15 @@ func (d *printDialog) printerChanged() {
 	if i < 0 || i >= len(d.printers) {
 		return
 	}
-	d.s.Printer = d.printers[i].Name
+	if name := d.printers[i].Name; name != d.s.Printer {
+		d.s.Printer = name
+		// Driver settings belong to the printer they were made for.
+		if _, ok := d.s.Vendor[goprint.VendorDevMode]; ok {
+			d.s.Vendor = maps.Clone(d.s.Vendor)
+			delete(d.s.Vendor, goprint.VendorDevMode)
+		}
+	}
+	d.props.Hide()
 	d.changed()
 	if d.capsCancel != nil {
 		d.capsCancel()
@@ -379,6 +399,17 @@ func (d *printDialog) setCaps(caps goprint.Capabilities) {
 	if cur.Name == "" {
 		cur = d.s.Media
 	}
+	d.selectMedia(cur)
+	if caps.DriverDialog {
+		d.props.Show()
+	}
+	d.showItems()
+	d.changed()
+}
+
+// selectMedia selects cur in the paper list, adding it if the printer
+// does not list it; an empty cur selects the printer default.
+func (d *printDialog) selectMedia(cur goprint.Media) {
 	if cur.Name != "" && !slices.ContainsFunc(d.media, func(m goprint.Media) bool { return m.Name == cur.Name }) {
 		d.media = append([]goprint.Media{cur}, d.media...)
 	}
@@ -392,8 +423,53 @@ func (d *printDialog) setCaps(caps goprint.Capabilities) {
 	}
 	d.paper.Options = opts
 	d.paper.SetSelectedIndex(sel)
-	d.showItems()
-	d.changed()
+}
+
+// showProperties opens the driver's dialog with the current settings and
+// takes over what the user chose there.
+func (d *printDialog) showProperties() {
+	s, err := d.settings()
+	if err != nil {
+		d.status.SetText(err.Error())
+		return
+	}
+	d.props.Disable()
+	d.ok.Disable()
+	owner := Owner(d.win)
+	runAsync(func() {
+		got, err := propertiesFunc(context.Background(), s, owner)
+		fyne.Do(func() {
+			d.props.Enable()
+			if d.finished || d.s.Printer != s.Printer {
+				return
+			}
+			switch {
+			case errors.Is(err, goprint.ErrCanceled):
+			case err != nil:
+				d.loadErr = err
+			default:
+				d.apply(got)
+			}
+			d.changed()
+		})
+	})
+}
+
+// apply shows s, as read back from the driver's dialog, in the controls.
+// Page ranges and scaling stay: the driver does not know them.
+func (d *printDialog) apply(s goprint.Settings) {
+	s.Printer, s.PageRanges, s.Scaling = d.s.Printer, d.s.PageRanges, d.s.Scaling
+	d.s = s
+	d.copies.SetText(strconv.Itoa(max(s.Copies, 1)))
+	if s.Collate != nil {
+		d.collate.SetChecked(*s.Collate)
+	}
+	if s.Media.Name != "" {
+		d.selectMedia(s.Media)
+	}
+	d.orientation.SetSelectedIndex(int(s.Orientation))
+	d.duplex.SetSelectedIndex(int(s.Duplex))
+	d.color.SetSelectedIndex(int(s.Color))
 }
 
 // showItems lists the form rows the printer supports.

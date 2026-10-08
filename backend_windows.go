@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 
+	"golang.org/x/sys/windows"
+
 	"github.com/timzifer/goprint/internal/core"
 	"github.com/timzifer/goprint/internal/winprint"
 	"github.com/timzifer/goprint/ipp"
@@ -50,16 +52,19 @@ func (windowsBackend) print(ctx context.Context, src io.Reader, doc Document, s 
 		return ippDirect.print(ctx, src, doc, s)
 	}
 	js, warnings := toJobSettings(s)
+	dm, dmWarnings := baseDevMode(s)
+	warnings = append(warnings, dmWarnings...)
 	if s.Strict && len(warnings) > 0 {
 		return nil, fmt.Errorf("%w: %s", ErrUnsupported, warnings[0])
 	}
 	j, err := winprint.Print(ctx, src, winprint.Options{
-		Printer:    s.Printer,
-		Title:      doc.Title,
-		OutputFile: s.Vendor[VendorOutputFile],
-		PageRanges: corePageRanges(s.PageRanges),
-		Settings:   js,
-		Strict:     s.Strict,
+		Printer:     s.Printer,
+		Title:       doc.Title,
+		OutputFile:  s.Vendor[VendorOutputFile],
+		PageRanges:  corePageRanges(s.PageRanges),
+		Settings:    js,
+		BaseDevMode: dm,
+		Strict:      s.Strict,
 	})
 	if err != nil {
 		return nil, err
@@ -69,6 +74,28 @@ func (windowsBackend) print(ctx context.Context, src io.Reader, doc Document, s 
 		warnings = append(warnings, Warning{"PageRanges", "ranges exceed the document's page count"})
 	}
 	return &Job{b: windowsJob{j}, warnings: warnings}, nil
+}
+
+func (windowsBackend) properties(ctx context.Context, s Settings, owner uintptr) (Settings, error) {
+	if isPrinterURI(s.Printer) {
+		return Settings{}, fmt.Errorf("%w: IPP printers have no driver dialog", ErrUnsupported)
+	}
+	js, warnings := toJobSettings(s)
+	dm, dmWarnings := baseDevMode(s)
+	warnings = append(warnings, dmWarnings...)
+	if s.Strict && len(warnings) > 0 {
+		return Settings{}, fmt.Errorf("%w: %s", ErrUnsupported, warnings[0])
+	}
+	res, err := winprint.PropertiesDialog(ctx, windows.HWND(owner), s.Printer, dm, js)
+	if err != nil {
+		return Settings{}, err
+	}
+	if s.Strict && len(res.Warnings) > 0 {
+		return Settings{}, fmt.Errorf("%w: %s", ErrUnsupported, fromWinWarnings(res.Warnings)[0])
+	}
+	chosen := withDevMode(fromJobSettings(res.Chosen, s), res.DevMode)
+	chosen.Printer = res.Printer
+	return chosen, nil
 }
 
 func corePageRanges(rs []PageRange) []core.PageRange {

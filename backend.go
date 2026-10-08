@@ -11,4 +11,5 @@ type backend interface {
 	capabilities(ctx context.Context, printer string) (Capabilities, error)
 	print(ctx context.Context, src io.Reader, doc Document, s Settings) (*Job, error)
 	dialog(ctx context.Context, doc Document, opts DialogOptions) (*Job, Settings, error)
+	properties(ctx context.Context, s Settings, owner uintptr) (Settings, error)
 }

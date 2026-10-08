@@ -3,6 +3,7 @@
 package winprint
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"math"
@@ -98,7 +99,9 @@ const (
 	dmBinAuto         = 7
 
 	dmOutBuffer = 2
+	dmInPrompt  = 4
 	dmInBuffer  = 8
+	idOK        = 1
 
 	dcPapers     = 2
 	dcPaperSize  = 3
@@ -283,8 +286,14 @@ func Capabilities(printer string) (Caps, error) {
 	return c, nil
 }
 
-// documentProperties wraps DocumentPropertiesW.
+// documentProperties wraps DocumentPropertiesW without UI.
 func documentProperties(h printerHandle, name *uint16, out, in []byte, mode uint32) int32 {
+	return documentPropertiesUI(0, h, name, out, in, mode)
+}
+
+// documentPropertiesUI wraps DocumentPropertiesW; with dmInPrompt it shows
+// the driver's dialog owned by owner.
+func documentPropertiesUI(owner windows.HWND, h printerHandle, name *uint16, out, in []byte, mode uint32) int32 {
 	var po, pi uintptr
 	if len(out) > 0 {
 		po = uintptr(unsafe.Pointer(&out[0]))
@@ -292,7 +301,7 @@ func documentProperties(h printerHandle, name *uint16, out, in []byte, mode uint
 	if len(in) > 0 {
 		pi = uintptr(unsafe.Pointer(&in[0]))
 	}
-	r, _, _ := syscall.SyscallN(procDocumentPropertiesW.Addr(), 0, uintptr(h), uintptr(unsafe.Pointer(name)), po, pi, uintptr(mode))
+	r, _, _ := syscall.SyscallN(procDocumentPropertiesW.Addr(), uintptr(owner), uintptr(h), uintptr(unsafe.Pointer(name)), po, pi, uintptr(mode))
 	return int32(r)
 }
 
@@ -320,17 +329,33 @@ func asDevMode(b []byte) *devMode { return (*devMode)(unsafe.Pointer(&b[0])) }
 // BuildDevMode applies s to the printer's default DEVMODE, lets the driver
 // validate it and reports settings that did not survive.
 func BuildDevMode(printer string, s JobSettings) ([]byte, []Warning, error) {
+	return BuildDevModeFrom(printer, nil, s)
+}
+
+// BuildDevModeFrom is BuildDevMode starting from base, a DEVMODE for the
+// same printer (e.g. from PropertiesDialog), instead of the printer's
+// default. A base that does not fit the printer is ignored with a warning.
+func BuildDevModeFrom(printer string, base []byte, s JobSettings) ([]byte, []Warning, error) {
 	caps, err := Capabilities(printer)
 	if err != nil {
 		return nil, nil, err
 	}
-	dm, err := DefaultDevMode(printer)
-	if err != nil {
-		return nil, nil, err
-	}
-	d := asDevMode(dm)
 	var warns []Warning
 	warn := func(setting, msg string) { warns = append(warns, Warning{setting, msg}) }
+	var dm []byte
+	if len(base) > 0 {
+		if err := checkDevMode(printer, base); err != nil {
+			warn(DevModeSetting, err.Error()+"; using the printer defaults")
+		} else {
+			dm = bytes.Clone(base)
+		}
+	}
+	if dm == nil {
+		if dm, err = DefaultDevMode(printer); err != nil {
+			return nil, nil, err
+		}
+	}
+	d := asDevMode(dm)
 
 	if s.Copies > 1 {
 		// DC_COPIES only covers copies made by the driver; the spooler
@@ -392,7 +417,11 @@ func BuildDevMode(printer string, s JobSettings) ([]byte, []Warning, error) {
 	}
 	defer h.Close()
 	name, _ := windows.UTF16PtrFromString(printer)
-	merged := make([]byte, len(dm))
+	n := documentProperties(h, name, nil, nil, 0)
+	if n <= 0 {
+		return nil, nil, fmt.Errorf("DocumentPropertiesW(size) failed for %q", printer)
+	}
+	merged := make([]byte, n)
 	if documentProperties(h, name, merged, dm, dmInBuffer|dmOutBuffer) < 0 {
 		return nil, nil, fmt.Errorf("DocumentPropertiesW(merge) failed for %q", printer)
 	}
