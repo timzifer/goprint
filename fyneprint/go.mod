@@ -4,7 +4,7 @@ go 1.26.0
 
 require (
 	fyne.io/fyne/v2 v2.8.1
-	github.com/timzifer/goprint v0.1.0
+	github.com/timzifer/goprint v0.2.0
 )
 
 require (
@@ -46,5 +46,6 @@ require (
 )
 
 // Developed against the goprint core in the parent directory; released
-// versions require the core release that has SetMainThreadRunner.
+// versions require the core release they were tested with (bump it before
+// tagging fyneprint/vX.Y.Z).
 replace github.com/timzifer/goprint => ../
