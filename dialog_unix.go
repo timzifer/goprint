@@ -56,6 +56,11 @@ func (b unixBackend) dialog(ctx context.Context, doc Document, opts DialogOption
 		// honored; RequirePrinter must not print elsewhere.
 		return nil, chosen, fmt.Errorf("%w: the print dialog did not keep printer %q (got %q)", ErrUnsupported, opts.Settings.Printer, chosen.Printer)
 	}
+	if opts.NoFileOutput && (res.Settings.Print["output-uri"] != "" || fileOutputName(chosen.Printer)) {
+		// GTK's "Print to File" reports where it would write; nothing is
+		// written before Print.
+		return nil, chosen, fmt.Errorf("%w: %q writes files (NoFileOutput)", ErrFileOutput, chosen.Printer)
+	}
 	if !opts.PrintNow {
 		return nil, chosen, nil
 	}

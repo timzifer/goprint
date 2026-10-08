@@ -10,6 +10,7 @@ import (
 	"os"
 	"reflect"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -97,22 +98,6 @@ func TestMediaLabel(t *testing.T) {
 	} {
 		if got := mediaLabel(m); got != want {
 			t.Errorf("mediaLabel(%v) = %q, want %q", m, got, want)
-		}
-	}
-}
-
-func TestIsFilePrinter(t *testing.T) {
-	for name, want := range map[string]bool{
-		"Microsoft Print to PDF":        true,
-		"Microsoft XPS Document Writer": true,
-		"OneNote (Desktop)":             true,
-		"PDF":                           true,
-		"Cups-PDF":                      true,
-		"SHARP BP-50M26 PCL6":           false,
-		"Office PDF-Ready Laser":        false,
-	} {
-		if got := isFilePrinter(name); got != want {
-			t.Errorf("isFilePrinter(%q) = %v", name, got)
 		}
 	}
 }
@@ -212,7 +197,7 @@ func stubPrinters(t *testing.T, list []goprint.Printer) *fakePrinters {
 }
 
 var testPrinters = []goprint.Printer{
-	{Name: "Microsoft Print to PDF"},
+	{Name: "Microsoft Print to PDF", ToFile: true},
 	{Name: "Office", Default: true},
 	{Name: "Lab"},
 }
@@ -395,6 +380,28 @@ func TestTrayLabel(t *testing.T) {
 	}
 	if got := trayLabel("tray-2"); got == "tray-2" || !strings.Contains(got, "2") {
 		t.Errorf("trayLabel(tray-2) = %q", got)
+	}
+}
+
+func TestPrintDialogNoFileOutput(t *testing.T) {
+	stubPrinters(t, testPrinters)
+	pdf := "Microsoft Print to PDF"
+	d, _ := openTestDialog(t, a4Doc(1), PrintDialogOptions{NoFileOutput: true, ShowFilePrinters: true, Settings: goprint.Settings{Printer: pdf}})
+	if slices.Contains(d.printer.Options, pdf) || d.s.Printer != "Office" {
+		t.Errorf("printers %q, selected %q", d.printer.Options, d.s.Printer)
+	}
+	if slices.Contains(d.buttons.Objects, fyne.CanvasObject(d.save)) {
+		t.Error("save button shown")
+	}
+	_, r := openTestDialog(t, a4Doc(1), PrintDialogOptions{NoFileOutput: true, RequirePrinter: true, Settings: goprint.Settings{Printer: pdf}})
+	if !r.called || !errors.Is(r.err, goprint.ErrFileOutput) {
+		t.Errorf("RequirePrinter on a file printer: %+v", r)
+	}
+
+	// An app that stores the PDF itself keeps the button.
+	d, _ = openTestDialog(t, a4Doc(1), PrintDialogOptions{NoFileOutput: true, SavePDF: func(io.Reader) error { return nil }})
+	if !slices.Contains(d.buttons.Objects, fyne.CanvasObject(d.save)) {
+		t.Error("save button hidden although SavePDF is set")
 	}
 }
 

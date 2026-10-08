@@ -46,12 +46,13 @@ func TestIPPPrinters(t *testing.T) {
 	b, _ := mockBackend(t,
 		ipptest.Printer{Name: "Office", Default: true, Attrs: officeAttrs},
 		ipptest.Printer{Name: "Lab"},
+		ipptest.Printer{Name: "Virtual", Attrs: ipp.Attributes{{Name: "device-uri", Values: []ipp.Value{ipp.URI("cups-pdf:/")}}}},
 	)
 	ps, err := b.printers(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(ps) != 2 {
+	if len(ps) != 3 {
 		t.Fatalf("got %d printers", len(ps))
 	}
 	byName := map[string]Printer{}
@@ -59,6 +60,9 @@ func TestIPPPrinters(t *testing.T) {
 		byName[p.Name] = p
 	}
 	o := byName["Office"]
+	if !byName["Virtual"].ToFile || o.ToFile || byName["Lab"].ToFile {
+		t.Errorf("ToFile: Virtual %v, Office %v, Lab %v", byName["Virtual"].ToFile, o.ToFile, byName["Lab"].ToFile)
+	}
 	if !o.Default || byName["Lab"].Default || o.Description != "Office printer" || o.Location != "2nd floor" {
 		t.Errorf("Office = %+v", o)
 	}

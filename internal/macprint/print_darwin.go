@@ -352,7 +352,7 @@ func dialog(pdf []byte, o Options, printNow bool) (Result, error) {
 	}
 	defer restore()
 
-	if !printNow {
+	if !printNow || o.Accept != nil {
 		panel := objc.ID(clsNSPrintPanel).Send(selPrintPanel)
 		if panel == 0 {
 			return Result{}, fmt.Errorf("%w: NSPrintPanel printPanel returned nil", errdefs.ErrNoDialog)
@@ -361,7 +361,26 @@ func dialog(pdf []byte, o Options, printNow bool) (Result, error) {
 		if objc.Send[int](panel, selRunModalWithPrintInfo, s.info) != nsModalResponseOK {
 			return Result{}, errdefs.ErrCanceled
 		}
-		return result(s.info), nil
+		r := result(s.info)
+		if o.Accept != nil {
+			if err := o.Accept(r); err != nil {
+				return Result{}, err
+			}
+		}
+		if !printNow {
+			return r, nil
+		}
+		// Print what the panel confirmed, without showing it again.
+		op, err := s.operation(o)
+		if err != nil {
+			return Result{}, err
+		}
+		op.Send(selSetShowsPrintPanel, false)
+		op.Send(selSetShowsProgressPanel, true)
+		if !objc.Send[bool](op, selRunOperation) {
+			return Result{}, fmt.Errorf("macprint: print operation failed")
+		}
+		return r, nil
 	}
 
 	op, err := s.operation(o)

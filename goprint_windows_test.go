@@ -162,3 +162,60 @@ func TestMain(m *testing.M) {
 	}
 	os.Exit(m.Run())
 }
+
+func TestWinToFile(t *testing.T) {
+	for _, tc := range []struct {
+		name, port string
+		want       bool
+	}{
+		{"Microsoft Print to PDF", "PORTPROMPT:", true},
+		{"Some Writer", "PORTPROMPT:", true},
+		{"Some Writer", "FILE:", true},
+		{"Plotter", `C:\spool\out.prn`, true},
+		{"Office", `\server\office`, false},
+		{"Office", "http://printer:631/ipp/print", false},
+		{"Office", "IP_192.168.1.20", false},
+		{"Office", "WSD-1234", false},
+	} {
+		if got := winToFile(winprint.PrinterInfo{Name: tc.name, Port: tc.port}); got != tc.want {
+			t.Errorf("winToFile(%q, %q) = %v", tc.name, tc.port, got)
+		}
+	}
+}
+
+func TestWindowsNoFileOutput(t *testing.T) {
+	requirePDFPrinter(t)
+	ps, err := Printers(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range ps {
+		if p.Name == pdfPrinter && !p.ToFile {
+			t.Errorf("%s: ToFile = false", p.Name)
+		}
+	}
+	accept := acceptPrinter(DialogOptions{NoFileOutput: true})
+	if err := accept(pdfPrinter); !errors.Is(err, ErrFileOutput) {
+		t.Errorf("accept(%q) = %v, want ErrFileOutput", pdfPrinter, err)
+	}
+	if acceptPrinter(DialogOptions{}) != nil {
+		t.Error("check without NoFileOutput")
+	}
+	// No UI: the modern dialog cannot keep file printers out.
+	_, _, err = Dialog(context.Background(), PDFBytes("x", testpdf.Generate(1, 100, 100)), DialogOptions{Style: StyleModern, NoFileOutput: true, PrintNow: true})
+	if !errors.Is(err, ErrUnsupported) {
+		t.Errorf("StyleModern + NoFileOutput = %v, want ErrUnsupported", err)
+	}
+}
+
+// TestNoFileOutputInteractive shows the dialog in settings-only mode (it
+// never prints); choosing a print-to-file printer must be refused.
+func TestNoFileOutputInteractive(t *testing.T) {
+	if os.Getenv("GOPRINT_DIALOG") == "" {
+		t.Skip("set GOPRINT_DIALOG=1 for the interactive dialog test")
+	}
+	winprint.Tracef = t.Logf
+	defer func() { winprint.Tracef = nil }()
+	_, s, err := Dialog(context.Background(), PDFBytes("NoFileOutput", testpdf.Generate(2, testpdf.A4Width, testpdf.A4Height)), DialogOptions{NoFileOutput: true})
+	t.Logf("printer %q, err %v", s.Printer, err)
+}

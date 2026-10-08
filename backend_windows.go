@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 
 	"golang.org/x/sys/windows"
 
@@ -25,9 +26,33 @@ func (windowsBackend) printers(context.Context) ([]Printer, error) {
 	}
 	out := make([]Printer, 0, len(ps))
 	for _, p := range ps {
-		out = append(out, Printer{Name: p.Name, Description: p.Comment, Location: p.Location, Default: p.Default})
+		out = append(out, Printer{Name: p.Name, Description: p.Comment, Location: p.Location, Default: p.Default, ToFile: winToFile(p)})
 	}
 	return out, nil
+}
+
+// winToFile reports printers that write files: by name, or by a port
+// that prompts for a file name ("PORTPROMPT:", "FILE:") or is a local
+// file ("C:\out\job.prn"). Ports of shared and network printers
+// (`\\server\queue`, "http://...") are not files.
+func winToFile(p winprint.PrinterInfo) bool {
+	port := strings.ToUpper(strings.TrimSpace(p.Port))
+	drivePath := len(port) > 2 && port[0] >= 'A' && port[0] <= 'Z' && port[1] == ':' && port[2] == '\\'
+	return fileOutputName(p.Name) || port == "PORTPROMPT:" || port == "FILE:" || drivePath
+}
+
+// fileOutputPrinter looks the printer up and reports whether it writes
+// files; unknown printers are judged by their name.
+func fileOutputPrinter(name string) bool {
+	ps, err := winprint.Printers()
+	if err == nil {
+		for _, p := range ps {
+			if strings.EqualFold(p.Name, name) {
+				return winToFile(p)
+			}
+		}
+	}
+	return fileOutputName(name)
 }
 
 // ippDirect handles printers given as ipp:// or ipps:// URI (IPP

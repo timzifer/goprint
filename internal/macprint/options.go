@@ -71,6 +71,10 @@ type Options struct {
 	Scaling int
 	// AutoRotate lets PDFKit rotate pages to match the paper orientation.
 	AutoRotate bool
+	// Accept, if set, vets what the user confirmed in the panel before
+	// anything is printed or saved. With it, Dialog shows the panel on its
+	// own (without preview) and runs the print operation afterwards.
+	Accept func(Result) error
 	// Extra are additional print settings (PMPrintSettingsSetValue). The
 	// macOS print system hands them to CUPS as job options, so IPP
 	// attribute names work.

@@ -29,6 +29,10 @@ var (
 	// ErrInvalid: invalid arguments, e.g. a Document with neither PDF nor
 	// Images, or negative Copies.
 	ErrInvalid = errdefs.ErrInvalid
+	// ErrFileOutput: with DialogOptions.NoFileOutput, the user chose a
+	// printer that writes files, or "Save as PDF" on macOS. Nothing was
+	// printed or written.
+	ErrFileOutput = errdefs.ErrFileOutput
 )
 
 func invalidf(format string, args ...any) error {

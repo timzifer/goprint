@@ -92,6 +92,14 @@ dialog reports the chosen printer, and it creates no job, so print-to-file
 printers never ask for a file name. It has no preview (see
 [#18](https://github.com/timzifer/goprint/issues/18)).
 
+`DialogOptions.NoFileOutput` keeps dialogs from writing files: printers that
+write files ("Microsoft Print to PDF", CUPS-PDF, GTK's "Print to File";
+`Printer.ToFile`) and "Save as PDF" or "Open in Preview" on macOS. None of the
+platform dialogs can hide them all, so choosing one returns
+`goprint.ErrFileOutput` before anything is printed or written. On Windows this
+uses the classic dialog (`StyleModern` returns `ErrUnsupported`); on macOS the
+panel then shows no preview.
+
 On Windows, `Settings.Vendor[goprint.VendorOutputFile]` writes the printer
 output to a file instead of the device, e.g. to get a PDF from
 "Microsoft Print to PDF" without its save dialog.

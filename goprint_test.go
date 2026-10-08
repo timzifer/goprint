@@ -86,3 +86,20 @@ func TestJobStateDone(t *testing.T) {
 		}
 	}
 }
+
+func TestFileOutputName(t *testing.T) {
+	for name, want := range map[string]bool{
+		"Microsoft Print to PDF":        true,
+		"Microsoft XPS Document Writer": true,
+		"OneNote (Desktop)":             true,
+		"PDF":                           true,
+		"Cups-PDF":                      true,
+		"Print to File":                 true,
+		"SHARP BP-50M26 PCL6":           false,
+		"Office PDF-Ready Laser":        false,
+	} {
+		if got := fileOutputName(name); got != want {
+			t.Errorf("fileOutputName(%q) = %v", name, got)
+		}
+	}
+}
