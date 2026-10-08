@@ -14,6 +14,14 @@ func FuzzCapsFromIPP(f *testing.F) {
 	m.AddGroup(ipp.TagPrinterGroup).Attrs = officeAttrs
 	b, _ := m.MarshalBinary()
 	f.Add(b)
+	// Values of unexpected, uncomparable types (#28).
+	m = ipp.NewResponse(ipp.StatusOK, 1)
+	m.AddGroup(ipp.TagPrinterGroup).Attrs = ipp.Attributes{
+		{Name: "print-quality-supported", Values: []ipp.Value{ipp.OctetString("x"), ipp.Enum(4)}},
+		{Name: "media-source-supported", Values: []ipp.Value{ipp.OctetString("tray-1")}},
+	}
+	b, _ = m.MarshalBinary()
+	f.Add(b)
 	f.Fuzz(func(t *testing.T, data []byte) {
 		msg, err := ipp.Decode(bytes.NewReader(data))
 		if err != nil {
