@@ -215,9 +215,47 @@ jobs:
         run: go test -count=1 -v -run 'Mac|OnMain|RunMain|PrintToFile' . ./internal/macprint
 
   # Single required status check for branch protection.
+  fyneprint:
+    # Separate module (own go.mod) so the core keeps no Fyne dependency.
+    # The example builds the real GLFW driver, which needs cgo.
+    name: fyneprint (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      CGO_ENABLED: "1" # overrides the workflow default; Fyne's driver is cgo
+    defaults:
+      run:
+        working-directory: fyneprint
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+          cache-dependency-path: fyneprint/go.sum
+      - name: Install GL, X11 and Wayland headers
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -q && sudo apt-get install -y -q libgl1-mesa-dev libegl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev
+      - name: go mod tidy
+        run: go mod tidy -diff
+      - name: go vet
+        run: go vet ./...
+      - name: Test
+        run: go test -count=1 -race ./...
+      - name: Build example
+        run: go build -o example-bin ./example
+      - name: staticcheck
+        if: runner.os == 'Linux'
+        uses: dominikh/staticcheck-action@v1
+        with:
+          install-go: false
+          working-directory: fyneprint
+
   ci-ok:
     if: always()
-    needs: [test, coverage, lint, cross-compile, integration-cups, integration-portal, macos-dialog]
+    needs: [test, coverage, lint, cross-compile, integration-cups, integration-portal, macos-dialog, fyneprint]
     runs-on: ubuntu-latest
     steps:
       - name: All jobs succeeded

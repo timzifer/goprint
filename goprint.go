@@ -115,6 +115,12 @@ type DialogOptions struct {
 	RequirePrinter bool
 	// PrintNow prints after confirmation. If false, Dialog only returns the
 	// chosen settings and a nil Job.
+	//
+	// On Windows, StyleAuto without PrintNow shows the classic dialog: it
+	// reports the chosen printer and full settings but has no preview, also
+	// where Windows 11 draws it in the modern look. StyleModern previews,
+	// but cannot report the printer and makes print-to-file printers ask
+	// for a file name.
 	PrintNow bool
 }
 

@@ -96,3 +96,41 @@ func TestPrintToFile(t *testing.T) {
 		t.Errorf("no output written: %v", err)
 	}
 }
+
+func TestOnMainRunner(t *testing.T) {
+	loopMu.Lock()
+	saved := loop
+	loop = nil
+	loopMu.Unlock()
+	defer func() {
+		loopMu.Lock()
+		loop = saved
+		loopMu.Unlock()
+		SetRunner(nil)
+	}()
+
+	// A toolkit's runner: hand the function to the main thread and wait,
+	// here through the suspended RunMain loop.
+	SetRunner(func(f func()) {
+		done := make(chan struct{})
+		saved.calls <- func() { defer close(done); f() }
+		<-done
+	})
+	var onMain bool
+	if err := OnMain(func() { onMain = IsMainThread() }); err != nil {
+		t.Fatalf("OnMain with runner: %v", err)
+	}
+	if !onMain {
+		t.Error("runner did not run fn on the main thread")
+	}
+
+	// A runner that stays on the calling goroutine must not run fn.
+	SetRunner(func(f func()) { f() })
+	called := false
+	if err := OnMain(func() { called = true }); !errors.Is(err, errdefs.ErrWrongThread) {
+		t.Fatalf("OnMain with wrong-thread runner = %v, want ErrWrongThread", err)
+	}
+	if called {
+		t.Error("fn was called off the main thread")
+	}
+}
