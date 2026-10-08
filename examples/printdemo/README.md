@@ -5,7 +5,7 @@ lists what to check on **macOS**, where the print panel cannot be tested
 in CI.
 
 ```sh
-git fetch && git switch examples/macos-printdemo
+git clone https://github.com/timzifer/goprint && cd goprint
 go run ./examples/printdemo -mode list
 ```
 
