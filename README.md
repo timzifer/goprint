@@ -122,6 +122,12 @@ returned `Job` cannot be tracked and reports completed.
 | `goprint/ipp`     | IPP codec and client (RFC 8010/8011), usable standalone |
 | `goprint/ipp/ipptest` | IPP mock server for tests                           |
 
+## Example
+
+[`examples/printdemo`](examples/printdemo) lists printers, shows capabilities,
+opens the print dialog and prints headless; its README has a manual test
+checklist for macOS.
+
 ## Development
 
 ```sh
