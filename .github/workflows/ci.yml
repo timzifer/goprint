@@ -224,6 +224,8 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    env:
+      CGO_ENABLED: "1" # overrides the workflow default; Fyne's driver is cgo
     defaults:
       run:
         working-directory: fyneprint
