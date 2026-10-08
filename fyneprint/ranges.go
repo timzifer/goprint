@@ -21,20 +21,26 @@ func parseRanges(s string) ([]goprint.PageRange, error) {
 		from, to, isRange := strings.Cut(part, "-")
 		f, err := pageNumber(from)
 		if err != nil {
-			return nil, fmt.Errorf("invalid page range %q", part)
+			return nil, &rangeError{part}
 		}
 		r := goprint.PageRange{From: f, To: f}
 		if isRange {
 			if to = strings.TrimSpace(to); to == "" {
 				r.To = 0
 			} else if r.To, err = pageNumber(to); err != nil || r.To < r.From {
-				return nil, fmt.Errorf("invalid page range %q", part)
+				return nil, &rangeError{part}
 			}
 		}
 		out = append(out, r)
 	}
 	return out, nil
 }
+
+// rangeError reports a part of a page selection that is not a page or a
+// range.
+type rangeError struct{ part string }
+
+func (e *rangeError) Error() string { return fmt.Sprintf("invalid page range %q", e.part) }
 
 func pageNumber(s string) (int, error) {
 	n, err := strconv.Atoi(strings.TrimSpace(s))

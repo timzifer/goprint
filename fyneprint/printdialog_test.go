@@ -227,7 +227,7 @@ func TestPrintDialogPrints(t *testing.T) {
 	f := stubPrinters(t, testPrinters)
 	d, r := openTestDialog(t, a4Doc(3), PrintDialogOptions{PrintNow: true, Settings: goprint.Settings{Quality: goprint.QualityHigh}})
 
-	if got, want := d.printer.Options, []string{printerLabel(testPrinters[1]), "Lab"}; !reflect.DeepEqual(got, want) {
+	if got, want := d.printer.Options, []string{d.printerLabel(testPrinters[1]), "Lab"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("printers = %q (file printer must be hidden)", got)
 	}
 	if d.s.Printer != "Office" || !d.shows(d.duplexItem) || !d.shows(d.colorItem) {
@@ -246,7 +246,7 @@ func TestPrintDialogPrints(t *testing.T) {
 	if b := d.sheet.Image.Bounds(); b.Dx() <= b.Dy() {
 		t.Errorf("landscape preview is %v", b)
 	}
-	if want := sheetLabel(1, 2, 2); d.pageLabel.Text != want {
+	if want := d.sheetLabel(1, 2, 2); d.pageLabel.Text != want {
 		t.Errorf("page label %q", d.pageLabel.Text)
 	}
 	test.Tap(d.ok)
@@ -345,7 +345,7 @@ func TestPrintDialogTrayAndQuality(t *testing.T) {
 		t.Fatal("tray or quality row missing")
 	}
 	// The preset tray is not listed by the printer but stays selectable.
-	want := []string{lang.X("fyneprint.paper.default", "Printer default"), trayLabel("manual"), trayLabel("auto"), trayLabel("tray-1"), "Fach 9"}
+	want := []string{lang.X("fyneprint.paper.default", "Printer default"), (&printDialog{}).trayLabel("manual"), (&printDialog{}).trayLabel("auto"), (&printDialog{}).trayLabel("tray-1"), "Fach 9"}
 	if !reflect.DeepEqual(d.tray.Options, want) || d.currentTray() != "manual" {
 		t.Errorf("trays %q, selected %q", d.tray.Options, d.currentTray())
 	}
@@ -374,12 +374,12 @@ func TestPrintDialogTrayAndQuality(t *testing.T) {
 func TestTrayLabel(t *testing.T) {
 	// Driver names and unknown keywords stay; "tray-N" is translated.
 	for _, in := range []string{"tray-x", "Kassette1", "tray-"} {
-		if got := trayLabel(in); got != in {
-			t.Errorf("trayLabel(%q) = %q", in, got)
+		if got := (&printDialog{}).trayLabel(in); got != in {
+			t.Errorf("(&printDialog{}).trayLabel(%q) = %q", in, got)
 		}
 	}
-	if got := trayLabel("tray-2"); got == "tray-2" || !strings.Contains(got, "2") {
-		t.Errorf("trayLabel(tray-2) = %q", got)
+	if got := (&printDialog{}).trayLabel("tray-2"); got == "tray-2" || !strings.Contains(got, "2") {
+		t.Errorf("(&printDialog{}).trayLabel(tray-2) = %q", got)
 	}
 }
 
@@ -516,13 +516,24 @@ func TestPrintDialogBadDocument(t *testing.T) {
 // TestTranslations checks that every translation file covers exactly the
 // keys the code uses.
 func TestTranslations(t *testing.T) {
-	src, err := os.ReadFile("printdialog.go")
-	if err != nil {
-		t.Fatal(err)
+	keys := TranslationKeys()
+	// Every key the code asks for has an English text.
+	var src []byte
+	for _, f := range []string{"printdialog.go", "translate.go"} {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		src = append(src, b...)
 	}
-	used := map[string]bool{}
-	for _, m := range regexp.MustCompile(`tr\("([a-z.]+)"|\{"([a-z.]+)", "`).FindAllStringSubmatch(string(src), -1) {
-		used["fyneprint."+m[1]+m[2]] = true
+	for _, m := range regexp.MustCompile(`\bt\("([A-Za-z.]+)"|"((?:orientation|duplex|color|quality|scaling|paper)\.[a-z]+)"`).FindAllStringSubmatch(string(src), -1) {
+		key := "fyneprint." + m[1] + m[2]
+		if m[1] == "OK" || m[1] == "Cancel" {
+			key = m[1]
+		}
+		if keys[key] == "" {
+			t.Errorf("no English text for %s", key)
+		}
 	}
 	files, err := translations.ReadDir("translations")
 	if err != nil || len(files) == 0 {
@@ -537,14 +548,14 @@ func TestTranslations(t *testing.T) {
 		if err := json.Unmarshal(b, &m); err != nil {
 			t.Fatalf("%s: %v", f.Name(), err)
 		}
-		for k := range used {
-			if m[k] == "" {
+		for k := range keys {
+			if m[k] == "" && k != "OK" && k != "Cancel" { // Fyne translates those
 				t.Errorf("%s: missing %s", f.Name(), k)
 			}
 		}
 		for k := range m {
-			if !used[k] {
-				t.Errorf("%s: unused %s", f.Name(), k)
+			if keys[k] == "" {
+				t.Errorf("%s: unknown %s", f.Name(), k)
 			}
 		}
 	}
