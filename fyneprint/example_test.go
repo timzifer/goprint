@@ -26,3 +26,28 @@ func ExampleShowDialog() {
 	}))
 	w.ShowAndRun()
 }
+
+func ExampleShowPrintDialog() {
+	a := app.New()
+	w := a.NewWindow("Report")
+	w.SetContent(widget.NewButton("Print…", func() {
+		opts := fyneprint.PrintDialogOptions{
+			PrintNow:  true,
+			Settings:  goprint.Settings{Printer: "Office", Media: goprint.MediaA4},
+			SaveLabel: "Export PDF",
+		}
+		fyneprint.ShowPrintDialog(w, goprint.PDFFile("report.pdf"), opts,
+			func(job *goprint.Job, s goprint.Settings, err error) {
+				switch {
+				case errors.Is(err, fyneprint.ErrSavedAsPDF):
+					log.Println("saved as PDF")
+				case errors.Is(err, goprint.ErrCanceled):
+				case err != nil:
+					log.Println("print:", err) // or dialog.ShowError(err, w)
+				default:
+					log.Printf("printing on %s", s.Printer)
+				}
+			})
+	}))
+	w.ShowAndRun()
+}

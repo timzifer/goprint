@@ -35,6 +35,8 @@ func main() {
 
 	report := func(job *goprint.Job, s goprint.Settings, err error) {
 		switch {
+		case errors.Is(err, fyneprint.ErrSavedAsPDF):
+			status.SetText("Saved as PDF.")
 		case errors.Is(err, goprint.ErrCanceled):
 			status.SetText("Canceled.")
 		case err != nil:
@@ -61,6 +63,10 @@ func main() {
 			status.SetText("Dialog open…")
 			fyneprint.ShowDialog(w, pdfDoc, goprint.DialogOptions{PrintNow: printNow.Checked}, report)
 		}),
+		widget.NewButton("Print PDF with the Fyne dialog…", func() {
+			status.SetText("Dialog open…")
+			fyneprint.ShowPrintDialog(w, pdfDoc, fyneprint.PrintDialogOptions{PrintNow: printNow.Checked}, report)
+		}),
 		widget.NewButton("Print this window…", func() {
 			img := w.Canvas().Capture()
 			doc := goprint.Document{
@@ -73,7 +79,7 @@ func main() {
 		}),
 		status,
 	))
-	w.Resize(fyne.NewSize(480, 260))
+	w.Resize(fyne.NewSize(1000, 700))
 	w.ShowAndRun()
 }
 

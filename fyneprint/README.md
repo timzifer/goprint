@@ -29,5 +29,41 @@ btn := widget.NewButton("Print…", func() {
   on the UI goroutine; on Windows it returns `goprint.ErrWrongThread` there
   instead of deadlocking.
 
+## Fyne's own print dialog
+
+`ShowPrintDialog` draws the dialog in Fyne instead of opening the platform's
+one, and prints through goprint's headless `Print`. It looks and behaves the
+same on every platform and can always preselect the printer, which the
+Windows 11 dialog cannot.
+
+```go
+fyneprint.ShowPrintDialog(w, goprint.PDFFile("report.pdf"),
+	fyneprint.PrintDialogOptions{PrintNow: true, Settings: goprint.Settings{Printer: "Office"}},
+	func(job *goprint.Job, s goprint.Settings, err error) {
+		switch {
+		case errors.Is(err, fyneprint.ErrSavedAsPDF): // saved instead of printed
+		case errors.Is(err, goprint.ErrCanceled):
+		case err != nil:
+			dialog.ShowError(err, w)
+		}
+	})
+```
+
+- **Settings:** printer, copies and collation, page ranges, paper size,
+  orientation, two-sided and color (if the printer supports them), scaling.
+  Other presets (quality, tray, vendor values) are passed through.
+- **Preview** of each sheet as it comes out of the printer: page ranges, paper,
+  orientation and scaling applied. Rendered with
+  [fyne-pdf](https://github.com/timzifer/fyne-pdf).
+- **Save as PDF** writes the selected pages, turned to the chosen orientation,
+  instead of printing (`SaveLabel`, `SavePDF`, `NoSave`). Printers that write
+  files ("Microsoft Print to PDF", CUPS-PDF, …) are hidden unless
+  `ShowFilePrinters` is set.
+- **Languages:** English and German built in. Apps add more with Fyne's
+  `lang.AddTranslations…`, using the keys in
+  [translations/fyneprint.de.json](translations/fyneprint.de.json).
+- No driver-specific options: use `ShowDialog` where users need them.
+
 `go run ./example` starts a small app that prints a generated PDF or a capture
-of its own window. Requires Fyne ≥ 2.6 and cgo (Fyne's driver).
+of its own window, with the platform's dialog or Fyne's own. Requires Fyne ≥ 2.6,
+Go ≥ 1.26.4 and cgo (Fyne's driver).
