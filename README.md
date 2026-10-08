@@ -121,6 +121,22 @@ returned `Job` cannot be tracked and reports completed.
 | `goprint`         | Public API, types, errors                               |
 | `goprint/ipp`     | IPP codec and client (RFC 8010/8011), usable standalone |
 | `goprint/ipp/ipptest` | IPP mock server for tests                           |
+| `goprint/fyneprint` | [Fyne](https://fyne.io) integration (separate module) |
+
+## Fyne
+
+Fyne's event loop owns the main thread, so a Fyne app uses
+[`fyneprint`](fyneprint) instead of `goprint.RunMain`: importing it lets
+goprint reach the main thread through `fyne.DoAndWait`, and `ShowDialog`
+runs the dialog owned by a Fyne window without blocking the UI:
+
+```go
+fyneprint.ShowDialog(w, doc, goprint.DialogOptions{PrintNow: true},
+	func(job *goprint.Job, s goprint.Settings, err error) { /* on the UI goroutine */ })
+```
+
+Other toolkits that own the main thread install their own runner with
+`goprint.SetMainThreadRunner`.
 
 ## Example
 
