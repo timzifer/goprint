@@ -67,3 +67,22 @@ func TestMediaBySize(t *testing.T) {
 		}
 	}
 }
+
+func FuzzMediaBySize(f *testing.F) {
+	f.Add(210000, 297000, "A4")
+	f.Add(100000, 150500, "Etikett 100 × 150")
+	f.Add(1, 1, "")
+	f.Fuzz(func(t *testing.T, w, h int, name string) {
+		if w <= 0 || h <= 0 || w > 1e8 || h > 1e8 {
+			return
+		}
+		m := mediaBySize(w, h, name)
+		p, err := ParseMedia(m.Name)
+		if err != nil {
+			t.Fatalf("mediaBySize(%d, %d, %q) = %q, not parseable: %v", w, h, name, m.Name, err)
+		}
+		if abs(p.Width-m.Width) > 1000 || abs(p.Height-m.Height) > 1000 {
+			t.Fatalf("name %q encodes %dx%d, media is %dx%d", m.Name, p.Width, p.Height, m.Width, m.Height)
+		}
+	})
+}

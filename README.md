@@ -23,9 +23,9 @@ headless or through the native print dialog.
 > | Feature | Linux/BSD | macOS | Windows |
 > |---|---|---|---|
 > | `Printers`, `GetCapabilities` | ✓ (CUPS) | ✓ (CUPS) | ✓ |
-> | `Print` (headless) | ✓ all settings via IPP | ✓ all settings via IPP | ✓ amd64/386, all settings via DEVMODE/PrintTicket |
+> | `Print` (headless) | ✓ all settings via IPP | ✓ all settings via IPP | ✓ amd64/386/arm64, all settings via DEVMODE/PrintTicket |
 > | IPP Everywhere printer by URI (`Printer: "ipp://…"`) | ✓ | ✓ | ✓ |
-> | `Dialog` | ✓ desktop dialog via xdg-desktop-portal (presets + result; no job tracking) | ✓ print panel with PDFKit preview; bare panel (no preview) for `PrintNow == false` | ✓ amd64/386: modern dialog with live preview and page selection; classic `PrintDlgEx` for settings-only use |
+> | `Dialog` | ✓ desktop dialog via xdg-desktop-portal (presets + result; no job tracking) | ✓ print panel with PDFKit preview; bare panel (no preview) for `PrintNow == false` | ✓ modern dialog with live preview and page selection; classic `PrintDlgEx` for settings-only use |
 >
 > Unimplemented parts return `ErrUnsupported` / `ErrNoDialog`.
 
@@ -121,7 +121,6 @@ returned `Job` cannot be tracked and reports completed.
 | `goprint`         | Public API, types, errors                               |
 | `goprint/ipp`     | IPP codec and client (RFC 8010/8011), usable standalone |
 | `goprint/ipp/ipptest` | IPP mock server for tests                           |
-| `goprint/win`     | Windows extras (raw PrintTicket, DEVMODE)               |
 
 ## Example
 

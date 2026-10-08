@@ -243,9 +243,6 @@ func (d *dialog) fail(err error) {
 // Dialog shows the modern print dialog with a live preview of the PDF from
 // src. It returns errdefs.ErrCanceled if the user cancels.
 func Dialog(ctx context.Context, src io.Reader, opts DialogOptions) (*DialogResult, error) {
-	if !addPageSupported {
-		return nil, fmt.Errorf("%w: print dialog on this architecture", errdefs.ErrUnsupported)
-	}
 	data, err := io.ReadAll(src)
 	if err != nil {
 		return nil, fmt.Errorf("read PDF: %w", err)
