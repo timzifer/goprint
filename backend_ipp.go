@@ -99,8 +99,19 @@ func printerFromIPP(p ipp.Printer, def string) Printer {
 	}
 }
 
-// qualityFromIPP maps print-quality enums (RFC 8011 5.2.13).
-var qualityFromIPP = map[ipp.Value]Quality{ipp.Enum(3): QualityDraft, ipp.Enum(4): QualityNormal, ipp.Enum(5): QualityHigh}
+// qualityFromIPP maps print-quality enums (RFC 8011 5.2.13). Values come
+// from the printer and may have any type.
+func qualityFromIPP(v ipp.Value) (Quality, bool) {
+	switch v {
+	case ipp.Enum(3):
+		return QualityDraft, true
+	case ipp.Enum(4):
+		return QualityNormal, true
+	case ipp.Enum(5):
+		return QualityHigh, true
+	}
+	return QualityDefault, false
+}
 
 func capsFromIPP(attrs ipp.Attributes) Capabilities {
 	var c Capabilities
@@ -147,7 +158,7 @@ func capsFromIPP(attrs ipp.Attributes) Capabilities {
 	}
 	if a, ok := attrs.Get("print-quality-supported"); ok {
 		for _, v := range a.Values {
-			if q, ok := qualityFromIPP[v]; ok && !slices.Contains(c.Qualities, q) {
+			if q, ok := qualityFromIPP(v); ok && !slices.Contains(c.Qualities, q) {
 				c.Qualities = append(c.Qualities, q)
 			}
 		}
