@@ -33,6 +33,8 @@ var officeAttrs = ipp.Attributes{
 	{Name: "print-color-mode-supported", Values: []ipp.Value{ipp.Keyword("monochrome"), ipp.Keyword("color")}},
 	{Name: "printer-resolution-supported", Values: []ipp.Value{ipp.Resolution{X: 600, Y: 600, Units: ipp.UnitsDPI}, ipp.Resolution{X: 472, Y: 472, Units: ipp.UnitsDPCM}}},
 	{Name: "document-format-supported", Values: []ipp.Value{ipp.MimeMediaType("application/pdf")}},
+	{Name: "media-source-supported", Values: []ipp.Value{ipp.Keyword("auto"), ipp.Keyword("tray-1"), ipp.Keyword("manual")}},
+	{Name: "print-quality-supported", Values: []ipp.Value{ipp.Enum(3), ipp.Enum(4), ipp.Enum(5)}},
 }
 
 func pdfDoc(title string) Document {
@@ -66,6 +68,8 @@ func TestIPPPrinters(t *testing.T) {
 		Color:       true,
 		Resolutions: []Resolution{{600, 600}, {1199, 1199}},
 		Formats:     []string{"application/pdf"},
+		Trays:       []string{"auto", "tray-1", "manual"},
+		Qualities:   []Quality{QualityDraft, QualityNormal, QualityHigh},
 	}
 	if !reflect.DeepEqual(o.Caps, want) {
 		t.Errorf("caps\n got %+v\nwant %+v", o.Caps, want)

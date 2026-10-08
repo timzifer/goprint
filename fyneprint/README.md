@@ -50,8 +50,8 @@ fyneprint.ShowPrintDialog(w, goprint.PDFFile("report.pdf"),
 ```
 
 - **Settings:** printer, copies and collation, page ranges, paper size,
-  orientation, two-sided and color (if the printer supports them), scaling.
-  Other presets (quality, tray, vendor values) are passed through.
+  orientation, scaling; two-sided, color, quality and paper source where the
+  printer reports them. Other presets (vendor values) are passed through.
 - **Preview** of each sheet as it comes out of the printer: page ranges, paper,
   orientation and scaling applied. Rendered with
   [fyne-pdf](https://github.com/timzifer/fyne-pdf).

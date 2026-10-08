@@ -40,6 +40,13 @@ type Capabilities struct {
 	Formats []string
 	// DialogPreview reports whether the native dialog shows a print preview.
 	DialogPreview bool
+	// Trays lists the paper sources, as values for [Settings.Tray]: IPP
+	// keywords such as "auto", "manual" or "tray-1" on Linux/BSD and macOS,
+	// the driver's bin names on Windows. Empty if unknown.
+	Trays []string
+	// Qualities lists the supported [Settings.Quality] values, without
+	// QualityDefault. Empty if unknown.
+	Qualities []Quality
 	// DriverDialog reports whether [PrinterProperties] can show the
 	// driver's own settings dialog for the printer.
 	DriverDialog bool
