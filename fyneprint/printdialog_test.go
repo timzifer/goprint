@@ -10,6 +10,7 @@ import (
 	"os"
 	"reflect"
 	"regexp"
+	"strings"
 	"testing"
 
 	"fyne.io/fyne/v2"
@@ -188,7 +189,12 @@ func stubPrinters(t *testing.T, list []goprint.Printer) *fakePrinters {
 	savedPrinters, savedCaps, savedPrint, savedProps, savedAsync := printersFunc, capsFunc, printFunc, propertiesFunc, runAsync
 	printersFunc = func(context.Context) ([]goprint.Printer, error) { return list, nil }
 	capsFunc = func(_ context.Context, name string) (goprint.Capabilities, error) {
-		return goprint.Capabilities{Media: []goprint.Media{goprint.MediaA4, goprint.MediaA5}, Duplex: name == "Office", Color: true, DriverDialog: name == "Office"}, nil
+		c := goprint.Capabilities{Media: []goprint.Media{goprint.MediaA4, goprint.MediaA5}, Duplex: name == "Office", Color: true, DriverDialog: name == "Office"}
+		if name == "Office" {
+			c.Trays = []string{"auto", "tray-1", "Fach 9"}
+			c.Qualities = []goprint.Quality{goprint.QualityDraft, goprint.QualityNormal}
+		}
+		return c, nil
 	}
 	propertiesFunc = func(context.Context, goprint.Settings, uintptr) (goprint.Settings, error) {
 		t.Fatal("unexpected driver dialog")
@@ -344,6 +350,51 @@ func TestPrintDialogPropertiesOtherPrinter(t *testing.T) {
 	}
 	if len(dm) != 2 {
 		t.Errorf("caller's map changed: %v", dm)
+	}
+}
+
+func TestPrintDialogTrayAndQuality(t *testing.T) {
+	stubPrinters(t, testPrinters)
+	d, r := openTestDialog(t, a4Doc(1), PrintDialogOptions{Settings: goprint.Settings{Tray: "manual", Quality: goprint.QualityNormal}})
+	if !d.shows(d.trayItem) || !d.shows(d.qualityItem) {
+		t.Fatal("tray or quality row missing")
+	}
+	// The preset tray is not listed by the printer but stays selectable.
+	want := []string{lang.X("fyneprint.paper.default", "Printer default"), trayLabel("manual"), trayLabel("auto"), trayLabel("tray-1"), "Fach 9"}
+	if !reflect.DeepEqual(d.tray.Options, want) || d.currentTray() != "manual" {
+		t.Errorf("trays %q, selected %q", d.tray.Options, d.currentTray())
+	}
+	if len(d.quality.Options) != 3 || d.currentQuality() != goprint.QualityNormal {
+		t.Errorf("qualities %q, selected %v", d.quality.Options, d.currentQuality())
+	}
+	d.tray.SetSelectedIndex(3) // tray-1
+	d.quality.SetSelectedIndex(1)
+	test.Tap(d.ok)
+	if r.s.Tray != "tray-1" || r.s.Quality != goprint.QualityDraft {
+		t.Errorf("reported tray %q, quality %v", r.s.Tray, r.s.Quality)
+	}
+
+	// A printer without trays and qualities hides the rows and passes the
+	// presets through.
+	d, r = openTestDialog(t, a4Doc(1), PrintDialogOptions{Settings: goprint.Settings{Printer: "Lab", Tray: "manual", Quality: goprint.QualityHigh}})
+	if d.shows(d.trayItem) || d.shows(d.qualityItem) {
+		t.Error("tray or quality row shown for Lab")
+	}
+	test.Tap(d.ok)
+	if r.s.Tray != "manual" || r.s.Quality != goprint.QualityHigh {
+		t.Errorf("Lab: tray %q, quality %v", r.s.Tray, r.s.Quality)
+	}
+}
+
+func TestTrayLabel(t *testing.T) {
+	// Driver names and unknown keywords stay; "tray-N" is translated.
+	for _, in := range []string{"tray-x", "Kassette1", "tray-"} {
+		if got := trayLabel(in); got != in {
+			t.Errorf("trayLabel(%q) = %q", in, got)
+		}
+	}
+	if got := trayLabel("tray-2"); got == "tray-2" || !strings.Contains(got, "2") {
+		t.Errorf("trayLabel(tray-2) = %q", got)
 	}
 }
 

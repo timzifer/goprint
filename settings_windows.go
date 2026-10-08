@@ -5,6 +5,8 @@ package goprint
 import (
 	"encoding/base64"
 	"maps"
+	"slices"
+	"strings"
 
 	"github.com/timzifer/goprint/internal/core"
 	"github.com/timzifer/goprint/internal/winprint"
@@ -113,6 +115,11 @@ func capsFromWin(c winprint.Caps) Capabilities {
 			out.Media = append(out.Media, m)
 		}
 	}
+	for _, b := range c.Bins {
+		if name := strings.TrimSpace(b.Name); name != "" && !slices.Contains(out.Trays, name) {
+			out.Trays = append(out.Trays, name)
+		}
+	}
 	for _, r := range c.Resolutions {
 		if r[0] > 0 && r[1] > 0 {
 			out.Resolutions = append(out.Resolutions, Resolution{X: r[0], Y: r[1]})
@@ -143,6 +150,18 @@ func withDevMode(s Settings, dm []byte) Settings {
 	}
 	s.Vendor[VendorDevMode] = base64.StdEncoding.EncodeToString(dm)
 	return s
+}
+
+func qualityFromDMRes(v int) Quality {
+	switch v {
+	case dmResDraft:
+		return QualityDraft
+	case dmResMedium:
+		return QualityNormal
+	case dmResHigh:
+		return QualityHigh
+	}
+	return QualityDefault
 }
 
 func fromWinWarnings(ws []winprint.Warning) []Warning {
@@ -184,13 +203,8 @@ func fromJobSettings(j winprint.JobSettings, preset Settings) Settings {
 	case dmColorMono:
 		s.Color = Monochrome
 	}
-	switch j.Quality {
-	case dmResDraft:
-		s.Quality = QualityDraft
-	case dmResMedium:
-		s.Quality = QualityNormal
-	case dmResHigh:
-		s.Quality = QualityHigh
+	if q := qualityFromDMRes(j.Quality); q != QualityDefault {
+		s.Quality = q
 	}
 	if j.Tray != "" {
 		s.Tray = j.Tray

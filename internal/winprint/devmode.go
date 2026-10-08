@@ -467,7 +467,7 @@ func matchBin(bins []Bin, tray string) (int16, bool) {
 		return dmBinManual, true
 	}
 	for _, b := range bins {
-		if strings.EqualFold(b.Name, tray) {
+		if strings.EqualFold(strings.TrimSpace(b.Name), strings.TrimSpace(tray)) {
 			return b.ID, true
 		}
 	}

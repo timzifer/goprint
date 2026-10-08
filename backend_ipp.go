@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -57,6 +58,7 @@ var printerAttrs = []string{
 	"printer-state", "printer-state-reasons",
 	"media-supported", "sides-supported", "color-supported", "print-color-mode-supported",
 	"printer-resolution-supported", "document-format-supported",
+	"media-source-supported", "print-quality-supported",
 }
 
 func (b ippBackend) printers(ctx context.Context) ([]Printer, error) {
@@ -97,6 +99,9 @@ func printerFromIPP(p ipp.Printer, def string) Printer {
 	}
 }
 
+// qualityFromIPP maps print-quality enums (RFC 8011 5.2.13).
+var qualityFromIPP = map[ipp.Value]Quality{ipp.Enum(3): QualityDraft, ipp.Enum(4): QualityNormal, ipp.Enum(5): QualityHigh}
+
 func capsFromIPP(attrs ipp.Attributes) Capabilities {
 	var c Capabilities
 	if a, ok := attrs.Get("media-supported"); ok {
@@ -136,6 +141,16 @@ func capsFromIPP(attrs ipp.Attributes) Capabilities {
 	}
 	if a, ok := attrs.Get("document-format-supported"); ok {
 		c.Formats = a.Strings()
+	}
+	if a, ok := attrs.Get("media-source-supported"); ok {
+		c.Trays = a.Strings()
+	}
+	if a, ok := attrs.Get("print-quality-supported"); ok {
+		for _, v := range a.Values {
+			if q, ok := qualityFromIPP[v]; ok && !slices.Contains(c.Qualities, q) {
+				c.Qualities = append(c.Qualities, q)
+			}
+		}
 	}
 	return c
 }

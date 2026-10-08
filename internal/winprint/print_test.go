@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -295,4 +296,35 @@ func TestFloatArguments(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestParseQualities(t *testing.T) {
+	caps := []byte(`<?xml version="1.0"?>
+<psf:PrintCapabilities xmlns:psf="http://schemas.microsoft.com/windows/2003/08/printing/printschemaframework" xmlns:psk="http://schemas.microsoft.com/windows/2003/08/printing/printschemakeywords" xmlns:ns0000="urn:vendor">
+  <psf:Feature name="psk:PageMediaSize"><psf:Option name="psk:ISOA4"/></psf:Feature>
+  <psf:Feature name="psk:PageOutputQuality">
+    <psf:Property name="psf:SelectionType"><psf:Value>psk:PickOne</psf:Value></psf:Property>
+    <psf:Option name="psk:Draft"><psf:Property name="psf:DisplayName"><psf:Value>Entwurf</psf:Value></psf:Property></psf:Option>
+    <psf:Option name="psk:Normal"/>
+    <psf:Option name="ns0000:Fine"/>
+    <psf:Option name="psk:High"/>
+    <psf:Option name="psk:Photographic"/>
+  </psf:Feature>
+  <psf:Feature name="psk:JobInputBin"><psf:Option name="psk:Draft"/></psf:Feature>
+</psf:PrintCapabilities>`)
+	if got, want := parseQualities(caps), []int{dmResDraft, dmResMedium, dmResHigh}; !slices.Equal(got, want) {
+		t.Errorf("parseQualities = %v, want %v", got, want)
+	}
+	if got := parseQualities([]byte("<x/>")); got != nil {
+		t.Errorf("no feature: %v", got)
+	}
+}
+
+func TestQualitiesPDFPrinter(t *testing.T) {
+	requirePrinter(t, pdfPrinter)
+	q, err := Qualities(context.Background(), pdfPrinter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("qualities %v", q)
 }

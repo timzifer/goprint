@@ -30,8 +30,9 @@ import (
 // PrintDialogOptions configures [ShowPrintDialog].
 type PrintDialogOptions struct {
 	// Settings are the presets shown in the dialog, the printer included.
-	// Settings the dialog has no control for (quality, tray, vendor
-	// values, credentials, strict) are passed through unchanged, except
+	// Settings the dialog has no control for (vendor values, credentials,
+	// strict; tray and quality where the printer does not list them) are
+	// passed through unchanged, except
 	// that the driver's settings (Vendor[goprint.VendorDevMode]) are
 	// dropped when the user picks another printer.
 	Settings goprint.Settings
@@ -127,6 +128,8 @@ type printDialog struct {
 	printers []goprint.Printer // shown in the list
 	caps     goprint.Capabilities
 	media    []goprint.Media // media offered for the current printer
+	trays    []string        // trays listed in d.tray
+	quals    []goprint.Quality
 
 	previewPage   int // index into the selected pages
 	previewCancel context.CancelFunc
@@ -138,11 +141,12 @@ type printDialog struct {
 	inputErr, loadErr error
 
 	printer, paper, orientation, duplex, color, scaling *widget.Select
+	tray, quality                                       *widget.Select
 	copies, ranges                                      *widget.Entry
 	collate                                             *widget.Check
 	allPages                                            *widget.RadioGroup
 	items                                               []*widget.FormItem
-	duplexItem, colorItem                               *widget.FormItem
+	duplexItem, colorItem, trayItem, qualityItem        *widget.FormItem
 	form                                                *widget.Form
 	sheet                                               *canvas.Image
 	pageLabel, status                                   *widget.Label
@@ -194,6 +198,10 @@ func (d *printDialog) build() {
 	d.duplex = newEnumSelect(&duplexNames, d.s.Duplex, d.changed)
 	d.color = newEnumSelect(&colorNames, d.s.Color, d.changed)
 	d.scaling = newEnumSelect(&scalingNames, d.s.Scaling, d.changed)
+	d.tray = widget.NewSelect(nil, func(string) { d.changed() })
+	d.quality = widget.NewSelect(nil, func(string) { d.changed() })
+	d.trayItem = widget.NewFormItem(tr("tray", "Paper source"), d.tray)
+	d.qualityItem = widget.NewFormItem(tr("quality", "Quality"), d.quality)
 	d.duplexItem = widget.NewFormItem(tr("duplex", "Two-sided"), d.duplex)
 	d.colorItem = widget.NewFormItem(tr("color", "Color"), d.color)
 
@@ -205,6 +213,8 @@ func (d *printDialog) build() {
 		widget.NewFormItem(tr("orientation", "Orientation"), d.orientation),
 		d.duplexItem,
 		d.colorItem,
+		d.qualityItem,
+		d.trayItem,
 		widget.NewFormItem(tr("scaling", "Scaling"), d.scaling),
 	}
 	d.form = widget.NewForm()
@@ -400,6 +410,8 @@ func (d *printDialog) setCaps(caps goprint.Capabilities) {
 		cur = d.s.Media
 	}
 	d.selectMedia(cur)
+	d.selectTray(d.currentTray())
+	d.selectQuality(d.currentQuality())
 	if caps.DriverDialog {
 		d.props.Show()
 	}
@@ -423,6 +435,78 @@ func (d *printDialog) selectMedia(cur goprint.Media) {
 	}
 	d.paper.Options = opts
 	d.paper.SetSelectedIndex(sel)
+}
+
+// selectTray lists the printer's trays and selects cur, else the preset.
+// A preset the printer does not list stays selectable; a tray chosen for
+// another printer does not.
+func (d *printDialog) selectTray(cur string) {
+	d.trays = slices.Clone(d.caps.Trays)
+	if cur == "" || !slices.Contains(d.trays, cur) {
+		cur = d.s.Tray
+	}
+	if cur != "" && len(d.trays) > 0 && !slices.Contains(d.trays, cur) {
+		d.trays = append([]string{cur}, d.trays...)
+	}
+	opts := []string{tr("paper.default", "Printer default")}
+	for _, t := range d.trays {
+		opts = append(opts, trayLabel(t))
+	}
+	d.tray.Options = opts
+	d.tray.SetSelectedIndex(slices.Index(d.trays, cur) + 1)
+}
+
+func (d *printDialog) currentTray() string {
+	if i := d.tray.SelectedIndex(); i > 0 && i <= len(d.trays) {
+		return d.trays[i-1]
+	}
+	return ""
+}
+
+// selectQuality works like selectTray.
+func (d *printDialog) selectQuality(cur goprint.Quality) {
+	d.quals = slices.Clone(d.caps.Qualities)
+	if cur == goprint.QualityDefault || !slices.Contains(d.quals, cur) {
+		cur = d.s.Quality
+	}
+	if cur != goprint.QualityDefault && len(d.quals) > 0 && !slices.Contains(d.quals, cur) {
+		d.quals = append(d.quals, cur)
+		slices.Sort(d.quals)
+	}
+	opts := []string{tr("paper.default", "Printer default")}
+	for _, q := range d.quals {
+		if int(q) < len(qualityNames) {
+			opts = append(opts, tr(qualityNames[q][0], qualityNames[q][1]))
+		} else {
+			opts = append(opts, q.String())
+		}
+	}
+	d.quality.Options = opts
+	d.quality.SetSelectedIndex(slices.Index(d.quals, cur) + 1)
+}
+
+func (d *printDialog) currentQuality() goprint.Quality {
+	if i := d.quality.SelectedIndex(); i > 0 && i <= len(d.quals) {
+		return d.quals[i-1]
+	}
+	return goprint.QualityDefault
+}
+
+// trayLabel names IPP tray keywords; driver bin names are shown as they
+// are.
+func trayLabel(t string) string {
+	switch t {
+	case "auto":
+		return tr("tray.auto", "Automatic")
+	case "manual":
+		return tr("tray.manual", "Manual feed")
+	}
+	if n, ok := strings.CutPrefix(t, "tray-"); ok {
+		if _, err := strconv.Atoi(n); err == nil {
+			return tr("tray.n", "Tray {{.N}}", map[string]any{"N": n})
+		}
+	}
+	return t
 }
 
 // showProperties opens the driver's dialog with the current settings and
@@ -470,13 +554,16 @@ func (d *printDialog) apply(s goprint.Settings) {
 	d.orientation.SetSelectedIndex(int(s.Orientation))
 	d.duplex.SetSelectedIndex(int(s.Duplex))
 	d.color.SetSelectedIndex(int(s.Color))
+	d.selectTray(s.Tray)
+	d.selectQuality(s.Quality)
 }
 
 // showItems lists the form rows the printer supports.
 func (d *printDialog) showItems() {
 	d.form.Items = nil
 	for _, it := range d.items {
-		if (it == d.duplexItem && !d.caps.Duplex) || (it == d.colorItem && !d.caps.Color) {
+		if (it == d.duplexItem && !d.caps.Duplex) || (it == d.colorItem && !d.caps.Color) ||
+			(it == d.trayItem && len(d.trays) == 0) || (it == d.qualityItem && len(d.quals) == 0) {
 			continue
 		}
 		d.form.Items = append(d.form.Items, it)
@@ -540,6 +627,12 @@ func (d *printDialog) settings() (goprint.Settings, error) {
 	}
 	if d.caps.Color {
 		s.Color = goprint.ColorMode(d.color.SelectedIndex())
+	}
+	if d.shows(d.trayItem) {
+		s.Tray = d.currentTray()
+	}
+	if d.shows(d.qualityItem) {
+		s.Quality = d.currentQuality()
 	}
 	s.Scaling = goprint.Scaling(d.scaling.SelectedIndex())
 	return s, nil
@@ -745,6 +838,7 @@ var (
 	orientationNames = [][2]string{{"orientation.auto", "Automatic"}, {"orientation.portrait", "Portrait"}, {"orientation.landscape", "Landscape"}, {"orientation.rportrait", "Portrait, upside down"}, {"orientation.rlandscape", "Landscape, upside down"}}
 	duplexNames      = [][2]string{{"duplex.default", "Printer default"}, {"duplex.none", "One-sided"}, {"duplex.long", "Long edge (book)"}, {"duplex.short", "Short edge (notepad)"}}
 	colorNames       = [][2]string{{"color.auto", "Automatic"}, {"color.color", "Color"}, {"color.mono", "Black and white"}}
+	qualityNames     = [][2]string{{"paper.default", "Printer default"}, {"quality.draft", "Draft"}, {"quality.normal", "Normal"}, {"quality.high", "High"}}
 	scalingNames     = [][2]string{{"scaling.auto", "Shrink to fit"}, {"scaling.fit", "Fit to paper"}, {"scaling.fill", "Fill paper"}, {"scaling.none", "Actual size"}}
 )
 

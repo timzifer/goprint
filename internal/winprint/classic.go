@@ -269,7 +269,7 @@ func readDevMode(printer string, dm []byte) JobSettings {
 		if caps, err := Capabilities(printer); err == nil {
 			for _, b := range caps.Bins {
 				if b.ID == d.DefaultSource {
-					s.Tray = b.Name
+					s.Tray = strings.TrimSpace(b.Name)
 				}
 			}
 		}

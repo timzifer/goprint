@@ -44,7 +44,22 @@ func (windowsBackend) capabilities(ctx context.Context, printer string) (Capabil
 	if err != nil {
 		return Capabilities{}, err
 	}
-	return capsFromWin(c), nil
+	caps := capsFromWin(c)
+	if printer == "" {
+		if printer, err = winprint.DefaultPrinter(); err != nil {
+			return caps, nil
+		}
+	}
+	// Qualities are optional: drivers without PrintCapabilities just
+	// report none.
+	if qs, err := winprint.Qualities(ctx, printer); err == nil {
+		for _, q := range qs {
+			if v := qualityFromDMRes(q); v != QualityDefault {
+				caps.Qualities = append(caps.Qualities, v)
+			}
+		}
+	}
+	return caps, nil
 }
 
 func (windowsBackend) print(ctx context.Context, src io.Reader, doc Document, s Settings) (*Job, error) {
