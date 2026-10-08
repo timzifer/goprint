@@ -66,9 +66,24 @@ fyneprint.ShowPrintDialog(w, goprint.PDFFile("report.pdf"),
 - **Accessibility:** the dialog is drawn by Fyne. It works with the keyboard
   (Tab moves between the controls), but Fyne has no screen reader support yet. Use
   `ShowDialog` where that matters.
-- **Languages:** English and German built in. Apps add more with Fyne's
-  `lang.AddTranslations…`, using the keys in
-  [translations/fyneprint.de.json](translations/fyneprint.de.json).
+- **Languages:** English and German built in, following the system language
+  through Fyne's `lang` package. Apps add more with `lang.AddTranslations…`,
+  using the keys in [translations/fyneprint.de.json](translations/fyneprint.de.json).
+- **Own localization:** apps that switch language themselves supply the texts
+  with `PrintDialogOptions.Translate` or, for all dialogs, `SetTranslator`.
+  Every text goes through it, OK and Cancel, option names and input errors
+  included. An empty result keeps the built-in text. `TranslationKeys` lists
+  all keys with their English texts (for a completeness test), `RenderText`
+  fills placeholders like `{{.Name}}`, and `RefreshTexts` redraws open dialogs
+  after a language switch.
+
+  ```go
+  fyneprint.SetTranslator(func(key, fallback string, data any) string {
+  	return fyneprint.RenderText(myLocalizer.Text(key, fallback), data)
+  })
+  // after the operator switched the language:
+  fyneprint.RefreshTexts()
+  ```
 - **Driver options:** for printers with a driver dialog (Windows) a
   "Properties…" button opens it (`goprint.PrinterProperties`). The choices
   there, finishing and other vendor features included, are shown in the

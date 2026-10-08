@@ -5,6 +5,8 @@
   "fyneprint.pages.all": "Alle",
   "fyneprint.pages": "Seiten",
   "fyneprint.pages.none": "Keine Seiten ausgewählt",
+  "fyneprint.pages.invalid": "Ungültiger Seitenbereich {{.Range}}",
+  "fyneprint.save.encrypted": "Dieses PDF erlaubt nicht, einzelne Seiten zu speichern",
   "fyneprint.duplex": "Beidseitig",
   "fyneprint.color": "Farbe",
   "fyneprint.printer": "Drucker",

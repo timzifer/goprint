@@ -21,6 +21,7 @@ import (
 	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/timzifer/cera/pdfedit"
 	pdf "github.com/timzifer/fyne-pdf"
 
 	"github.com/timzifer/goprint"
@@ -36,6 +37,9 @@ type PrintDialogOptions struct {
 	// that the driver's settings (Vendor[goprint.VendorDevMode]) are
 	// dropped when the user picks another printer.
 	Settings goprint.Settings
+	// Translate, if set, supplies the dialog's texts, before the app-wide
+	// [SetTranslator] and Fyne's lang package; see [Translator].
+	Translate Translator
 	// RequirePrinter makes the dialog fail with goprint.ErrPrinterNotFound
 	// if Settings.Printer does not exist, instead of falling back to the
 	// default printer.
@@ -111,6 +115,7 @@ func ShowPrintDialog(w fyne.Window, doc goprint.Document, opts PrintDialogOption
 func showPrintDialog(w fyne.Window, doc goprint.Document, opts PrintDialogOptions, done func(*goprint.Job, goprint.Settings, error)) *printDialog {
 	d := &printDialog{win: w, doc: doc, opts: opts, done: done, s: opts.Settings}
 	d.build()
+	openDialogs[d] = true
 	d.dlg.Show()
 	d.load()
 	return d
@@ -156,72 +161,67 @@ type printDialog struct {
 	buttons                                             *fyne.Container
 	sheet                                               *canvas.Image
 	pageLabel, status                                   *widget.Label
-	prev, next, save, ok, props                         *widget.Button
+	prev, next, save, ok, props, cancel                 *widget.Button
+	printerItem, copiesItem, pagesItem, paperItem       *widget.FormItem
+	orientationItem, scalingItem                        *widget.FormItem
+	printersLoaded                                      bool
 }
 
 func (d *printDialog) build() {
 	d.printer = widget.NewSelect(nil, func(string) { d.printerChanged() })
-	d.printer.PlaceHolder = tr("loading", "Loading printers…")
-	d.props = widget.NewButton(tr("properties", "Properties…"), d.showProperties)
+	d.props = widget.NewButton("", d.showProperties)
 	d.props.Hide()
 	d.copies = widget.NewEntry()
 	d.copies.SetText(strconv.Itoa(max(d.s.Copies, 1)))
 	d.copies.Validator = func(s string) error {
 		if n, err := strconv.Atoi(strings.TrimSpace(s)); err != nil || n < 1 || n > 999 {
-			return errors.New(tr("copies.invalid", "Enter a number from 1 to 999"))
+			return errors.New(d.t("copies.invalid"))
 		}
 		return nil
 	}
 	d.copies.OnChanged = func(string) { d.changed() }
-	d.collate = widget.NewCheck(tr("collate", "Collate"), func(bool) {})
+	d.collate = widget.NewCheck("", func(bool) {})
 	d.collate.SetChecked(d.s.Collate == nil || *d.s.Collate)
 
-	all, some := tr("pages.all", "All"), tr("pages", "Pages")
 	d.ranges = widget.NewEntry()
 	d.ranges.SetPlaceHolder("1-3, 5")
 	d.ranges.SetText(formatRanges(d.s.PageRanges))
 	d.ranges.Validator = func(s string) error {
-		_, err := parseRanges(s)
+		_, err := d.parseRanges(s)
 		return err
 	}
-	d.allPages = widget.NewRadioGroup([]string{all, some}, func(string) { d.changed() })
+	// Options are set by applyTexts; the selection is kept by index.
+	d.allPages = widget.NewRadioGroup([]string{"", ""}, func(string) { d.changed() })
 	d.allPages.Horizontal = true
 	d.allPages.Required = true
-	if len(d.s.PageRanges) > 0 {
-		d.allPages.SetSelected(some)
-	} else {
-		d.allPages.SetSelected(all)
-	}
 	d.ranges.OnChanged = func(s string) {
-		if strings.TrimSpace(s) != "" && d.allPages.Selected != some {
-			d.allPages.SetSelected(some)
+		if strings.TrimSpace(s) != "" && d.allPagesSelected() {
+			d.allPages.SetSelected(d.allPages.Options[1])
 		}
 		d.changed()
 	}
 
 	d.paper = widget.NewSelect(nil, func(string) { d.changed() })
-	d.orientation = newEnumSelect(&orientationNames, d.s.Orientation, d.changed)
-	d.duplex = newEnumSelect(&duplexNames, d.s.Duplex, d.changed)
-	d.color = newEnumSelect(&colorNames, d.s.Color, d.changed)
-	d.scaling = newEnumSelect(&scalingNames, d.s.Scaling, d.changed)
+	d.orientation = newEnumSelect(d.changed)
+	d.duplex = newEnumSelect(d.changed)
+	d.color = newEnumSelect(d.changed)
+	d.scaling = newEnumSelect(d.changed)
 	d.tray = widget.NewSelect(nil, func(string) { d.changed() })
 	d.quality = widget.NewSelect(nil, func(string) { d.changed() })
-	d.trayItem = widget.NewFormItem(tr("tray", "Paper source"), d.tray)
-	d.qualityItem = widget.NewFormItem(tr("quality", "Quality"), d.quality)
-	d.duplexItem = widget.NewFormItem(tr("duplex", "Two-sided"), d.duplex)
-	d.colorItem = widget.NewFormItem(tr("color", "Color"), d.color)
+	d.printerItem = widget.NewFormItem("", container.NewBorder(nil, nil, nil, d.props, d.printer))
+	d.copiesItem = widget.NewFormItem("", container.NewBorder(nil, nil, nil, d.collate, d.copies))
+	d.pagesItem = widget.NewFormItem("", container.NewBorder(nil, nil, d.allPages, nil, d.ranges))
+	d.paperItem = widget.NewFormItem("", d.paper)
+	d.orientationItem = widget.NewFormItem("", d.orientation)
+	d.duplexItem = widget.NewFormItem("", d.duplex)
+	d.colorItem = widget.NewFormItem("", d.color)
+	d.qualityItem = widget.NewFormItem("", d.quality)
+	d.trayItem = widget.NewFormItem("", d.tray)
+	d.scalingItem = widget.NewFormItem("", d.scaling)
 
 	d.items = []*widget.FormItem{
-		widget.NewFormItem(tr("printer", "Printer"), container.NewBorder(nil, nil, nil, d.props, d.printer)),
-		widget.NewFormItem(tr("copies", "Copies"), container.NewBorder(nil, nil, nil, d.collate, d.copies)),
-		widget.NewFormItem(tr("pages", "Pages"), container.NewBorder(nil, nil, d.allPages, nil, d.ranges)),
-		widget.NewFormItem(tr("paper", "Paper size"), d.paper),
-		widget.NewFormItem(tr("orientation", "Orientation"), d.orientation),
-		d.duplexItem,
-		d.colorItem,
-		d.qualityItem,
-		d.trayItem,
-		widget.NewFormItem(tr("scaling", "Scaling"), d.scaling),
+		d.printerItem, d.copiesItem, d.pagesItem, d.paperItem, d.orientationItem,
+		d.duplexItem, d.colorItem, d.qualityItem, d.trayItem, d.scalingItem,
 	}
 	d.form = widget.NewForm()
 	d.showItems()
@@ -238,32 +238,25 @@ func (d *printDialog) build() {
 
 	d.status = widget.NewLabel("")
 	d.status.Wrapping = fyne.TextWrapWord
-	label := tr("print", "Print")
-	if !d.opts.PrintNow {
-		label = lang.L("OK")
-	}
-	d.ok = widget.NewButtonWithIcon(label, theme.ConfirmIcon(), d.confirm)
+	d.ok = widget.NewButtonWithIcon("", theme.ConfirmIcon(), d.confirm)
 	d.ok.Importance = widget.HighImportance
 	d.ok.Disable()
-	cancel := widget.NewButtonWithIcon(lang.L("Cancel"), theme.CancelIcon(), func() { d.finish(nil, goprint.Settings{}, goprint.ErrCanceled) })
-	saveLabel := d.opts.SaveLabel
-	if saveLabel == "" {
-		saveLabel = tr("save", "Save as PDF")
-	}
-	d.save = widget.NewButtonWithIcon(saveLabel, theme.DocumentSaveIcon(), d.saveAsPDF)
+	d.cancel = widget.NewButtonWithIcon("", theme.CancelIcon(), func() { d.finish(nil, goprint.Settings{}, goprint.ErrCanceled) })
+	d.save = widget.NewButtonWithIcon("", theme.DocumentSaveIcon(), d.saveAsPDF)
 	d.save.Disable()
 	left := []fyne.CanvasObject{d.save}
 	if d.opts.NoSave || (d.opts.NoFileOutput && d.opts.SavePDF == nil) {
 		left = nil
 	}
-	d.buttons = container.NewHBox(append(left, layout.NewSpacer(), cancel, d.ok)...)
+	d.buttons = container.NewHBox(append(left, layout.NewSpacer(), d.cancel, d.ok)...)
+	d.applyTexts()
 
 	settings := container.NewBorder(nil, d.status, nil, nil, container.NewVScroll(d.form))
 	split := container.NewHSplit(preview, settings)
 	split.Offset = 0.45
 	title := d.doc.Title
 	if title == "" {
-		title = tr("print", "Print")
+		title = d.t("print")
 	}
 	d.dlg = dialog.NewCustomWithoutButtons(title, container.NewBorder(nil, d.buttons, nil, nil, split), d.win)
 	d.dlg.SetOnClosed(func() { d.finish(nil, goprint.Settings{}, goprint.ErrCanceled) })
@@ -349,24 +342,26 @@ func (d *printDialog) setPrinters(all []goprint.Printer, err error) error {
 	}
 	names := make([]string, len(d.printers))
 	for i, p := range d.printers {
-		names[i] = printerLabel(p)
+		names[i] = d.printerLabel(p)
 	}
 	d.printer.Options = names
 	if len(d.printers) == 0 {
-		d.printer.PlaceHolder = tr("noprinters", "No printers")
+		d.printersLoaded = true
+		d.printer.PlaceHolder = d.t("noprinters")
 		d.loadErr = err
 		d.showStatus()
 		d.printer.Refresh()
 		return nil
 	}
+	d.printersLoaded = true
 	d.printer.PlaceHolder = ""
 	d.printer.SetSelectedIndex(slices.IndexFunc(d.printers, func(p goprint.Printer) bool { return p.Name == want }))
 	return nil
 }
 
-func printerLabel(p goprint.Printer) string {
+func (d *printDialog) printerLabel(p goprint.Printer) string {
 	if p.Default {
-		return tr("printer.default", "{{.Name}} (default)", map[string]any{"Name": p.Name})
+		return d.t("printer.default", map[string]any{"Name": p.Name})
 	}
 	return p.Name
 }
@@ -431,7 +426,7 @@ func (d *printDialog) selectMedia(cur goprint.Media) {
 	if cur.Name != "" && !slices.ContainsFunc(d.media, func(m goprint.Media) bool { return m.Name == cur.Name }) {
 		d.media = append([]goprint.Media{cur}, d.media...)
 	}
-	opts := []string{tr("paper.default", "Printer default")}
+	opts := []string{d.t("paper.default")}
 	sel := 0
 	for i, m := range d.media {
 		opts = append(opts, mediaLabel(m))
@@ -454,9 +449,9 @@ func (d *printDialog) selectTray(cur string) {
 	if cur != "" && len(d.trays) > 0 && !slices.Contains(d.trays, cur) {
 		d.trays = append([]string{cur}, d.trays...)
 	}
-	opts := []string{tr("paper.default", "Printer default")}
+	opts := []string{d.t("paper.default")}
 	for _, t := range d.trays {
-		opts = append(opts, trayLabel(t))
+		opts = append(opts, d.trayLabel(t))
 	}
 	d.tray.Options = opts
 	d.tray.SetSelectedIndex(slices.Index(d.trays, cur) + 1)
@@ -479,10 +474,10 @@ func (d *printDialog) selectQuality(cur goprint.Quality) {
 		d.quals = append(d.quals, cur)
 		slices.Sort(d.quals)
 	}
-	opts := []string{tr("paper.default", "Printer default")}
+	opts := []string{d.t("paper.default")}
 	for _, q := range d.quals {
-		if int(q) < len(qualityNames) {
-			opts = append(opts, tr(qualityNames[q][0], qualityNames[q][1]))
+		if int(q) < len(qualityKeys) {
+			opts = append(opts, d.t(qualityKeys[q]))
 		} else {
 			opts = append(opts, q.String())
 		}
@@ -500,16 +495,16 @@ func (d *printDialog) currentQuality() goprint.Quality {
 
 // trayLabel names IPP tray keywords; driver bin names are shown as they
 // are.
-func trayLabel(t string) string {
+func (d *printDialog) trayLabel(t string) string {
 	switch t {
 	case "auto":
-		return tr("tray.auto", "Automatic")
+		return d.t("tray.auto")
 	case "manual":
-		return tr("tray.manual", "Manual feed")
+		return d.t("tray.manual")
 	}
 	if n, ok := strings.CutPrefix(t, "tray-"); ok {
 		if _, err := strconv.Atoi(n); err == nil {
-			return tr("tray.n", "Tray {{.N}}", map[string]any{"N": n})
+			return d.t("tray.n", map[string]any{"N": n})
 		}
 	}
 	return t
@@ -613,7 +608,7 @@ func (d *printDialog) settings() (goprint.Settings, error) {
 	s := d.s
 	n, err := strconv.Atoi(strings.TrimSpace(d.copies.Text))
 	if err != nil || n < 1 {
-		return s, fmt.Errorf("%w: copies %q", goprint.ErrInvalid, d.copies.Text)
+		return s, &textError{d.t("copies.invalid"), goprint.ErrInvalid}
 	}
 	s.Copies = n
 	if n > 1 {
@@ -621,9 +616,9 @@ func (d *printDialog) settings() (goprint.Settings, error) {
 		s.Collate = &c
 	}
 	s.PageRanges = nil
-	if d.allPages.Selected != tr("pages.all", "All") {
-		if s.PageRanges, err = parseRanges(d.ranges.Text); err != nil {
-			return s, fmt.Errorf("%w: %v", goprint.ErrInvalid, err)
+	if !d.allPagesSelected() {
+		if s.PageRanges, err = d.parseRanges(d.ranges.Text); err != nil {
+			return s, err
 		}
 	}
 	s.Media = d.currentMedia()
@@ -662,7 +657,7 @@ func (d *printDialog) changed() {
 	}
 	pages := d.selectedPages(s)
 	if err == nil && len(pages) == 0 {
-		err = errors.New(tr("pages.none", "No pages selected"))
+		err = errors.New(d.t("pages.none"))
 	}
 	d.inputErr = err
 	d.showStatus()
@@ -705,7 +700,7 @@ func (d *printDialog) renderPreview(s goprint.Settings, pages []int) {
 	if d.previewPage < len(pages)-1 {
 		d.next.Enable()
 	}
-	d.pageLabel.SetText(sheetLabel(d.previewPage+1, len(pages), pages[d.previewPage]+1))
+	d.pageLabel.SetText(d.sheetLabel(d.previewPage+1, len(pages), pages[d.previewPage]+1))
 
 	if d.previewCancel != nil {
 		d.previewCancel()
@@ -733,8 +728,8 @@ func (d *printDialog) renderPreview(s goprint.Settings, pages []int) {
 }
 
 // sheetLabel names sheet n of total, which shows page (1-based).
-func sheetLabel(n, total, page int) string {
-	return tr("sheet", "Sheet {{.N}} of {{.Total}} (page {{.Page}})", map[string]any{"N": n, "Total": total, "Page": page})
+func (d *printDialog) sheetLabel(n, total, page int) string {
+	return d.t("sheet", map[string]any{"N": n, "Total": total, "Page": page})
 }
 
 func (d *printDialog) confirm() {
@@ -767,6 +762,10 @@ func (d *printDialog) saveAsPDF() {
 		out, err := savedPDF(context.Background(), data, sizes, s)
 		fyne.Do(func() {
 			d.save.Enable()
+			if errors.Is(err, pdfedit.ErrEncrypted) {
+				d.status.SetText(d.t("save.encrypted"))
+				return
+			}
 			if err != nil {
 				d.status.SetText(err.Error())
 				return
@@ -821,6 +820,7 @@ func (d *printDialog) finish(job *goprint.Job, s goprint.Settings, err error) {
 		return
 	}
 	d.finished = true
+	delete(openDialogs, d)
 	if d.previewCancel != nil {
 		d.previewCancel()
 	}
@@ -838,34 +838,114 @@ func (d *printDialog) finish(job *goprint.Job, s goprint.Settings, err error) {
 	}
 }
 
-// Choices of the enum selects (translation key, English text), in the
-// order of the goprint constants.
-var (
-	orientationNames = [][2]string{{"orientation.auto", "Automatic"}, {"orientation.portrait", "Portrait"}, {"orientation.landscape", "Landscape"}, {"orientation.rportrait", "Portrait, upside down"}, {"orientation.rlandscape", "Landscape, upside down"}}
-	duplexNames      = [][2]string{{"duplex.default", "Printer default"}, {"duplex.none", "One-sided"}, {"duplex.long", "Long edge (book)"}, {"duplex.short", "Short edge (notepad)"}}
-	colorNames       = [][2]string{{"color.auto", "Automatic"}, {"color.color", "Color"}, {"color.mono", "Black and white"}}
-	qualityNames     = [][2]string{{"paper.default", "Printer default"}, {"quality.draft", "Draft"}, {"quality.normal", "Normal"}, {"quality.high", "High"}}
-	scalingNames     = [][2]string{{"scaling.auto", "Shrink to fit"}, {"scaling.fit", "Fit to paper"}, {"scaling.fill", "Fill paper"}, {"scaling.none", "Actual size"}}
-)
+// applyTexts sets every text of the dialog, at build time and from
+// RefreshTexts. Selections are kept by index.
+func (d *printDialog) applyTexts() {
+	first := len(d.orientation.Options) == 0
+	pick := func(sel *widget.Select, opts []string, initial int) {
+		i := sel.SelectedIndex()
+		if first {
+			i = initial
+		}
+		sel.Options = opts
+		if i < 0 || i >= len(opts) {
+			i = 0
+		}
+		sel.SetSelectedIndex(i)
+		sel.Refresh()
+	}
+	enum := func(sel *widget.Select, keys []string, initial int) {
+		opts := make([]string, len(keys))
+		for i, k := range keys {
+			opts[i] = d.t(k)
+		}
+		pick(sel, opts, initial)
+	}
+	enum(d.orientation, orientationKeys, int(d.s.Orientation))
+	enum(d.duplex, duplexKeys, int(d.s.Duplex))
+	enum(d.color, colorKeys, int(d.s.Color))
+	enum(d.scaling, scalingKeys, int(d.s.Scaling))
 
-// tr translates a fyneprint text. Keys are prefixed so that they cannot
-// clash with the app's own translations.
-func tr(key, fallback string, data ...any) string {
-	return lang.X("fyneprint."+key, fallback, data...)
+	some := 0
+	if first && len(d.s.PageRanges) > 0 || !first && !d.allPagesSelected() {
+		some = 1
+	}
+	d.allPages.Options = []string{d.t("pages.all"), d.t("pages")}
+	d.allPages.SetSelected(d.allPages.Options[some])
+	d.allPages.Refresh()
+
+	for it, key := range map[*widget.FormItem]string{
+		d.printerItem: "printer", d.copiesItem: "copies", d.pagesItem: "pages", d.paperItem: "paper",
+		d.orientationItem: "orientation", d.duplexItem: "duplex", d.colorItem: "color",
+		d.qualityItem: "quality", d.trayItem: "tray", d.scalingItem: "scaling",
+	} {
+		it.Text = d.t(key)
+	}
+	d.form.Refresh()
+
+	switch {
+	case !d.printersLoaded:
+		d.printer.PlaceHolder = d.t("loading")
+	case len(d.printers) == 0:
+		d.printer.PlaceHolder = d.t("noprinters")
+	default:
+		i := d.printer.SelectedIndex()
+		opts := make([]string, len(d.printers))
+		for i, p := range d.printers {
+			opts[i] = d.printerLabel(p)
+		}
+		d.printer.Options = opts
+		if i >= 0 {
+			// Same printer, new label: no reload of its capabilities.
+			changed := d.printer.OnChanged
+			d.printer.OnChanged = nil
+			d.printer.SetSelectedIndex(i)
+			d.printer.OnChanged = changed
+		}
+	}
+	d.printer.Refresh()
+	if !first {
+		d.selectMedia(d.currentMedia())
+		d.selectTray(d.currentTray())
+		d.selectQuality(d.currentQuality())
+	}
+
+	d.props.SetText(d.t("properties"))
+	d.collate.Text = d.t("collate")
+	d.collate.Refresh()
+	if d.opts.PrintNow {
+		d.ok.SetText(d.t("print"))
+	} else {
+		d.ok.SetText(d.t("OK"))
+	}
+	d.cancel.SetText(d.t("Cancel"))
+	if d.opts.SaveLabel != "" {
+		d.save.SetText(d.opts.SaveLabel)
+	} else {
+		d.save.SetText(d.t("save"))
+	}
+	if !first {
+		d.changed() // status line and sheet label
+	}
 }
 
-// newEnumSelect builds a select over names whose index is the enum value.
-func newEnumSelect[T ~int](names *[][2]string, v T, changed func()) *widget.Select {
-	opts := make([]string, len(*names))
-	for i, n := range *names {
-		opts[i] = tr(n[0], n[1])
+// allPagesSelected reports whether "All" is chosen in the pages radio.
+func (d *printDialog) allPagesSelected() bool {
+	return d.allPages.Selected == "" || d.allPages.Selected == d.allPages.Options[0]
+}
+
+// parseRanges is parseRanges with an error text for the dialog.
+func (d *printDialog) parseRanges(s string) ([]goprint.PageRange, error) {
+	rs, err := parseRanges(s)
+	var re *rangeError
+	if errors.As(err, &re) {
+		return nil, &textError{d.t("pages.invalid", map[string]any{"Range": re.part}), goprint.ErrInvalid}
 	}
-	s := widget.NewSelect(opts, nil)
-	if int(v) >= 0 && int(v) < len(opts) {
-		s.SetSelectedIndex(int(v))
-	} else {
-		s.SetSelectedIndex(0)
-	}
-	s.OnChanged = func(string) { changed() }
-	return s
+	return rs, err
+}
+
+// newEnumSelect builds a select whose index is an enum value; options and
+// the initial selection are set by applyTexts.
+func newEnumSelect(changed func()) *widget.Select {
+	return widget.NewSelect(nil, func(string) { changed() })
 }
