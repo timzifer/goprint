@@ -23,6 +23,10 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         go: [stable, oldstable]
+        include:
+          # Windows on ARM: float/HFA arguments go through the arm64 thunk.
+          - os: windows-11-arm
+            go: stable
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -30,18 +34,24 @@ jobs:
         with:
           go-version: ${{ matrix.go }}
       - name: Test
+        # Packages that print run in parallel: goprint serializes
+        # print-to-file jobs across processes (see winprint/filelock.go).
+        run: go test -count=1 -shuffle=on ./...
+      - name: Test (386)
+        # 32-bit Windows passes 64-bit and struct arguments on the stack;
+        # x64 runners execute 386 binaries natively.
+        if: runner.os == 'Windows' && runner.arch == 'X64'
         shell: bash
-        # Hosted Windows runners lose the print-to-file output of
-        # "Microsoft Print to PDF" jobs sent concurrently by separate
-        # processes (goprint reports this as ErrOutputMissing). Packages that
-        # print therefore run one at a time there.
-        run: go test -count=1 -shuffle=on ${{ runner.os == 'Windows' && '-p 1' || '' }} ./...
+        env:
+          GOARCH: "386"
+        run: go test -count=1 -p 1 ./...
       - name: Test (race)
-        # The race detector needs cgo.
+        # The race detector needs cgo and is not available on windows/arm64.
+        if: ${{ !(runner.os == 'Windows' && runner.arch == 'ARM64') }}
         env:
           CGO_ENABLED: "1"
         shell: bash
-        run: go test -count=1 -race ${{ runner.os == 'Windows' && '-p 1' || '' }} ./...
+        run: go test -count=1 -race ./...
       - name: Fuzz smoke
         # Native fuzzing is unreliable on Windows runners (spurious
         # "context deadline exceeded"); seed corpora still run there via go test.

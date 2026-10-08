@@ -153,3 +153,16 @@ func TestPortalMissing(t *testing.T) {
 		t.Fatalf("err = %v, want ErrNoDialog", err)
 	}
 }
+
+func FuzzParseGTKRanges(f *testing.F) {
+	f.Add("0-1,4,6-1073741823")
+	f.Add("-,,3-")
+	f.Fuzz(func(t *testing.T, s string) {
+		for _, r := range parseGTKRanges(s) {
+			// Ranges handed back to the caller must pass Settings.validate.
+			if r.From < 1 || (r.To != 0 && r.To < r.From) {
+				t.Fatalf("parseGTKRanges(%q) yields invalid range %+v", s, r)
+			}
+		}
+	})
+}

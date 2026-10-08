@@ -12,12 +12,6 @@ import (
 	"github.com/timzifer/goprint/ipp"
 )
 
-// VendorOutputFile is a Settings.Vendor key understood on Windows: the
-// printer output is written to this file instead of the device (print to
-// file). With "Microsoft Print to PDF" this yields a PDF without the save
-// dialog.
-const VendorOutputFile = "windows:output-file"
-
 var platform backend = windowsBackend{}
 
 type windowsBackend struct{}

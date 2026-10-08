@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/timzifer/goprint/internal/com"
 	"math"
 	"os"
 	"path/filepath"
@@ -15,6 +16,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/timzifer/goprint/internal/errdefs"
 	"github.com/timzifer/goprint/internal/testpdf"
@@ -202,5 +204,36 @@ func TestPrinterGuardBlocksDefault(t *testing.T) {
 	_, err := Print(context.Background(), bytes.NewReader(testpdf.Generate(1, 100, 100)), Options{})
 	if err == nil || !strings.Contains(err.Error(), "only") {
 		t.Fatalf("Print to default printer = %v, want guard error", err)
+	}
+}
+
+// TestFloatArguments sets the DPI of a D2D device context through the
+// float-argument call path (XMM registers on amd64, s-registers via thunk
+// on arm64, stack on 386) and reads it back through pointers.
+func TestFloatArguments(t *testing.T) {
+	a, err := apartment()
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = a.Do(context.Background(), func() error {
+		r, err := newRenderer()
+		if err != nil {
+			return err
+		}
+		defer r.Close()
+		const setDpi, getDpi = 51, 52
+		if err := r.ctx.CallArgsHR("SetDpi", setDpi, com.F(123.5), com.F(234.25)); err != nil {
+			// SetDpi returns void; any value is fine.
+			_ = err
+		}
+		var x, y float32
+		r.ctx.Call(getDpi, uintptr(unsafe.Pointer(&x)), uintptr(unsafe.Pointer(&y)))
+		if x != 123.5 || y != 234.25 {
+			t.Errorf("DPI read back %v x %v, want 123.5 x 234.25", x, y)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 }

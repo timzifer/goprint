@@ -2,13 +2,16 @@
 
 package winprint
 
-import "math"
+import (
+	"math"
 
-// On 386 a struct passed by value is pushed on the stack word by word.
-const addPageSupported = true
+	"github.com/timzifer/goprint/internal/com"
+)
 
-func sizeArgs(s size) []uintptr {
-	return []uintptr{uintptr(math.Float32bits(s.W)), uintptr(math.Float32bits(s.H))}
+// sizeArg passes a D2D_SIZE_F by value. On 386 a struct is pushed on the
+// stack word by word.
+func sizeArg(s size) []com.Arg {
+	return []com.Arg{com.I(uintptr(math.Float32bits(s.W))), com.I(uintptr(math.Float32bits(s.H)))}
 }
 
 // tokenArgs passes an EventRegistrationToken (int64) by value: two stack words.
