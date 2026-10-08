@@ -21,10 +21,6 @@ type unixBackend struct {
 	ippBackend
 }
 
-// VendorGTKPrefix marks Settings.Vendor keys passed to the print portal as
-// GTK print settings, e.g. Vendor["gtk:output-bin"] = "top".
-const VendorGTKPrefix = "gtk:"
-
 func (b unixBackend) dialog(ctx context.Context, doc Document, opts DialogOptions) (*Job, Settings, error) {
 	if opts.Style == StyleClassic {
 		return nil, Settings{}, fmt.Errorf("%w: StyleClassic is windows-only", ErrUnsupported)
@@ -299,6 +295,9 @@ func parseGTKRanges(s string) []PageRange {
 			if to, err = strconv.Atoi(strings.TrimSpace(b)); err != nil {
 				continue
 			}
+		}
+		if from < 0 || to < from {
+			continue // not a valid range; drop rather than pass it on
 		}
 		r := PageRange{From: from + 1, To: to + 1}
 		if to >= 1<<30-1 {

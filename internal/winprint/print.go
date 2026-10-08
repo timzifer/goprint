@@ -243,9 +243,6 @@ func guard(printer string) error {
 
 // Print renders the PDF from src and spools it.
 func Print(ctx context.Context, src io.Reader, opts Options) (*Job, error) {
-	if !addPageSupported {
-		return nil, fmt.Errorf("%w: printing on this architecture", errdefs.ErrUnsupported)
-	}
 	if opts.Printer == "" {
 		def, err := DefaultPrinter()
 		if err != nil {
@@ -269,6 +266,10 @@ func Print(ctx context.Context, src io.Reader, opts Options) (*Job, error) {
 	}
 	job := newJob(opts.Printer, opts.Title)
 	job.output = opts.OutputFile
+	if job.output != "" {
+		// Held until Wait has verified the output (or the job is released).
+		job.res.keep(printToFileLock(ctx))
+	}
 	err = a.Do(ctx, func() error { return job.spool(ctx, src, opts) })
 	if err != nil {
 		job.res.release()
@@ -434,9 +435,9 @@ func addPage(r *renderer, control *com.Unknown, doc *pdfDoc, i int, lay paperLay
 		return err
 	}
 	defer list.Release()
-	args := append([]uintptr{list.Ptr()}, sizeArgs(out)...)
-	args = append(args, 0, 0, 0) // page ticket, tag1, tag2
-	return control.CallHR("ID2D1PrintControl.AddPage", printControlAddPage, args...)
+	args := append([]com.Arg{com.I(list.Ptr())}, sizeArg(out)...)
+	args = append(args, com.I(0), com.I(0), com.I(0)) // page ticket, tag1, tag2
+	return control.CallArgsHR("ID2D1PrintControl.AddPage", printControlAddPage, args...)
 }
 
 // advise registers the status sink on the package target.

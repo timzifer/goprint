@@ -2,12 +2,13 @@
 
 package winprint
 
-// On arm64 D2D_SIZE_F is a homogeneous floating-point aggregate passed in
-// SIMD registers, which syscall.SyscallN cannot set. Printing needs an
-// assembly trampoline there; until then it reports ErrUnsupported.
-const addPageSupported = false
+import "github.com/timzifer/goprint/internal/com"
 
-func sizeArgs(size) []uintptr { return nil }
+// sizeArg passes a D2D_SIZE_F by value. On arm64 it is a homogeneous
+// floating-point aggregate and travels in s-registers.
+func sizeArg(s size) []com.Arg {
+	return []com.Arg{com.F(s.W), com.F(s.H)}
+}
 
 func tokenArgs(t int64) []uintptr { return []uintptr{uintptr(t)} }
 

@@ -86,7 +86,10 @@ func NewFileStream(path string, mode uint32, create bool) (*Stream, error) {
 
 // Rewind seeks to the start.
 func (s *Stream) Rewind() error {
-	return s.CallHR("IStream.Seek", streamSeek, 0, 0 /* STREAM_SEEK_SET */, 0)
+	// Seek(LARGE_INTEGER move, DWORD origin, ULARGE_INTEGER *newPos): the
+	// 64-bit move takes two stack words on 386.
+	args := append(Int64Args(0), 0 /* STREAM_SEEK_SET */, 0)
+	return s.CallHR("IStream.Seek", streamSeek, args...)
 }
 
 // Read implements io.Reader.

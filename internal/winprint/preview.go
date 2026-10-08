@@ -155,8 +155,8 @@ func (d *dialog) makePage(jobPage uint32) error {
 	if err := p.r.pdf.CallHR("IPdfRendererNative.RenderPageToSurface", pdfRendererRenderPageToSurface, args...); err != nil {
 		return err
 	}
-	return p.target.CallFloatHR("IPrintPreviewDxgiPackageTarget.DrawPage", previewDrawPage,
-		uintptr(jobPage), surface.Ptr(), com.F32(previewDPI), com.F32(previewDPI))
+	return p.target.CallArgsHR("IPrintPreviewDxgiPackageTarget.DrawPage", previewDrawPage,
+		com.I(uintptr(jobPage)), com.I(surface.Ptr()), com.F(previewDPI), com.F(previewDPI))
 }
 
 // pdfRenderParams mirrors PDF_RENDER_PARAMS.
