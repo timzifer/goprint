@@ -121,7 +121,6 @@ returned `Job` cannot be tracked and reports completed.
 | `goprint`         | Public API, types, errors                               |
 | `goprint/ipp`     | IPP codec and client (RFC 8010/8011), usable standalone |
 | `goprint/ipp/ipptest` | IPP mock server for tests                           |
-| `goprint/win`     | Windows extras (raw PrintTicket, DEVMODE)               |
 
 ## Development
 
