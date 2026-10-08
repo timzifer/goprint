@@ -166,3 +166,24 @@ func FuzzParseGTKRanges(f *testing.F) {
 		}
 	})
 }
+
+func TestPortalNoFileOutput(t *testing.T) {
+	p := portaltest.Start(t)
+	p.SetChoose(func(s map[string]string, ps map[string]dbus.Variant) (map[string]string, map[string]dbus.Variant) {
+		s["printer"] = "In Datei drucken" // GTK's localized "Print to File"
+		s["output-uri"] = "file:///home/user/out.pdf"
+		return s, ps
+	})
+	_, _, err := Dialog(context.Background(), portalDoc(), DialogOptions{NoFileOutput: true, PrintNow: true})
+	if !errors.Is(err, ErrFileOutput) {
+		t.Fatalf("err = %v, want ErrFileOutput", err)
+	}
+	if _, printed := p.Calls(); len(printed) != 0 {
+		t.Error("printed to a file")
+	}
+
+	// Without NoFileOutput the choice is the user's.
+	if _, _, err := Dialog(context.Background(), portalDoc(), DialogOptions{PrintNow: true}); err != nil {
+		t.Fatal(err)
+	}
+}

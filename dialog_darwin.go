@@ -76,6 +76,18 @@ func (b darwinBackend) dialog(ctx context.Context, doc Document, opts DialogOpti
 		return nil, Settings{}, fmt.Errorf("%w: %s", ErrUnsupported, warnings[0])
 	}
 
+	if opts.NoFileOutput {
+		o.Accept = func(r macprint.Result) error {
+			if r.Disposition != "" && r.Disposition != macprint.DispositionSpool {
+				return fmt.Errorf("%w: %s (NoFileOutput)", ErrFileOutput, r.Disposition)
+			}
+			if fileOutputName(r.Printer) {
+				return fmt.Errorf("%w: %q writes files (NoFileOutput)", ErrFileOutput, r.Printer)
+			}
+			return nil
+		}
+	}
+
 	baseline := -1
 	if opts.PrintNow {
 		baseline = b.newestJobID(ctx)

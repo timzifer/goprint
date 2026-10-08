@@ -56,6 +56,11 @@ type PrintDialogOptions struct {
 	// by default: printing headless to them cannot ask for a file name, and
 	// the save button covers the use case.
 	ShowFilePrinters bool
+	// NoFileOutput keeps the dialog away from the file system: printers
+	// that write files are never listed (not even as preset; with
+	// RequirePrinter that is goprint.ErrFileOutput), and the save button
+	// is hidden unless SavePDF hands the PDF to the app.
+	NoFileOutput bool
 }
 
 // ErrSavedAsPDF is reported when the user saved the document as PDF
@@ -148,6 +153,7 @@ type printDialog struct {
 	items                                               []*widget.FormItem
 	duplexItem, colorItem, trayItem, qualityItem        *widget.FormItem
 	form                                                *widget.Form
+	buttons                                             *fyne.Container
 	sheet                                               *canvas.Image
 	pageLabel, status                                   *widget.Label
 	prev, next, save, ok, props                         *widget.Button
@@ -247,10 +253,10 @@ func (d *printDialog) build() {
 	d.save = widget.NewButtonWithIcon(saveLabel, theme.DocumentSaveIcon(), d.saveAsPDF)
 	d.save.Disable()
 	left := []fyne.CanvasObject{d.save}
-	if d.opts.NoSave {
+	if d.opts.NoSave || (d.opts.NoFileOutput && d.opts.SavePDF == nil) {
 		left = nil
 	}
-	buttons := container.NewHBox(append(left, layout.NewSpacer(), cancel, d.ok)...)
+	d.buttons = container.NewHBox(append(left, layout.NewSpacer(), cancel, d.ok)...)
 
 	settings := container.NewBorder(nil, d.status, nil, nil, container.NewVScroll(d.form))
 	split := container.NewHSplit(preview, settings)
@@ -259,7 +265,7 @@ func (d *printDialog) build() {
 	if title == "" {
 		title = tr("print", "Print")
 	}
-	d.dlg = dialog.NewCustomWithoutButtons(title, container.NewBorder(nil, buttons, nil, nil, split), d.win)
+	d.dlg = dialog.NewCustomWithoutButtons(title, container.NewBorder(nil, d.buttons, nil, nil, split), d.win)
 	d.dlg.SetOnClosed(func() { d.finish(nil, goprint.Settings{}, goprint.ErrCanceled) })
 	if d.win != nil {
 		sz := d.win.Canvas().Size()
@@ -313,14 +319,21 @@ func openDocument(doc goprint.Document) ([]byte, *pdf.Source, []pageSize, error)
 // default printer or the first one.
 func (d *printDialog) setPrinters(all []goprint.Printer, err error) error {
 	want := d.s.Printer
+	refused := false
 	for _, p := range all {
-		if d.opts.ShowFilePrinters || !isFilePrinter(p.Name) || p.Name == want {
+		switch {
+		case p.ToFile && d.opts.NoFileOutput:
+			refused = refused || p.Name == want
+		case !p.ToFile || d.opts.ShowFilePrinters || p.Name == want:
 			d.printers = append(d.printers, p)
 		}
 	}
 	if want != "" && !slices.ContainsFunc(d.printers, func(p goprint.Printer) bool { return p.Name == want }) {
 		if d.opts.RequirePrinter {
-			if err == nil {
+			switch {
+			case refused:
+				err = goprint.ErrFileOutput
+			case err == nil:
 				err = goprint.ErrPrinterNotFound
 			}
 			return fmt.Errorf("%w: %q", err, want)
@@ -356,13 +369,6 @@ func printerLabel(p goprint.Printer) string {
 		return tr("printer.default", "{{.Name}} (default)", map[string]any{"Name": p.Name})
 	}
 	return p.Name
-}
-
-// isFilePrinter reports printers that write a file instead of paper.
-func isFilePrinter(name string) bool {
-	n := strings.ToLower(name)
-	return strings.Contains(n, "print to pdf") || strings.Contains(n, "xps document writer") ||
-		strings.Contains(n, "onenote") || n == "pdf" || strings.Contains(n, "cups-pdf")
 }
 
 // printerChanged loads the capabilities of the selected printer.

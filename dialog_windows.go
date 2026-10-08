@@ -190,6 +190,14 @@ func (windowsBackend) dialog(ctx context.Context, doc Document, opts DialogOptio
 	if opts.Style == StyleModern {
 		classic = false
 	}
+	if opts.NoFileOutput {
+		if opts.Style == StyleModern {
+			// The modern dialog spools before it tells the printer, and a
+			// print-to-file printer asks for the file name right then.
+			return nil, Settings{}, fmt.Errorf("%w: the modern windows print dialog cannot keep print-to-file printers out (NoFileOutput)", ErrUnsupported)
+		}
+		classic = true
+	}
 	src, err := doc.open()
 	if err != nil {
 		return nil, Settings{}, err
@@ -224,6 +232,20 @@ func (windowsBackend) dialog(ctx context.Context, doc Document, opts DialogOptio
 	return &Job{b: windowsJob{res.Job}, warnings: warnings}, chosen, nil
 }
 
+// acceptPrinter returns the check for the printer the user confirmed, nil
+// if anything goes.
+func acceptPrinter(opts DialogOptions) func(string) error {
+	if !opts.NoFileOutput {
+		return nil
+	}
+	return func(printer string) error {
+		if fileOutputPrinter(printer) {
+			return fmt.Errorf("%w: %q writes files (NoFileOutput)", ErrFileOutput, printer)
+		}
+		return nil
+	}
+}
+
 // classicDialog runs PrintDlgExW: full DEVMODE presets, page ranges, no
 // preview, and no job unless PrintNow.
 func classicDialog(ctx context.Context, src io.Reader, title string, opts DialogOptions) (*Job, Settings, error) {
@@ -244,6 +266,9 @@ func classicDialog(ctx context.Context, src io.Reader, title string, opts Dialog
 		BaseDevMode: dm,
 		PageRanges:  corePageRanges(opts.Settings.PageRanges),
 		PrintNow:    opts.PrintNow,
+
+		HidePrintToFile: opts.NoFileOutput,
+		Accept:          acceptPrinter(opts),
 	})
 	if err != nil {
 		return nil, Settings{}, err

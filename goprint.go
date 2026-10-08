@@ -4,6 +4,7 @@ import (
 	"context"
 	"image"
 	"io"
+	"strings"
 )
 
 // Document is the content to print. Exactly one of PDF or Images is set.
@@ -27,7 +28,11 @@ type Printer struct {
 	Description string
 	Location    string
 	Default     bool
-	Caps        Capabilities
+	// ToFile reports a printer that writes files instead of paper, such as
+	// "Microsoft Print to PDF", "Microsoft XPS Document Writer" or
+	// CUPS-PDF. It is detected from the name, and on Windows from the port.
+	ToFile bool
+	Caps   Capabilities
 }
 
 // Capabilities lists what a printer (and the platform's dialog) supports.
@@ -124,6 +129,13 @@ type DialogOptions struct {
 	Style DialogStyle
 	// RequirePrinter forces a dialog that preselects Settings.Printer.
 	RequirePrinter bool
+	// NoFileOutput keeps the dialog from writing files: printers that
+	// write files ("Microsoft Print to PDF", CUPS-PDF, GTK's "Print to
+	// File") and "Save as PDF" / "Open in Preview" on macOS. Where the
+	// dialog cannot hide them, choosing one returns [ErrFileOutput] before
+	// anything is printed or written. On Windows this needs the classic
+	// dialog: StyleAuto uses it, StyleModern returns [ErrUnsupported].
+	NoFileOutput bool
 	// PrintNow prints after confirmation. If false, Dialog only returns the
 	// chosen settings and a nil Job.
 	//
@@ -147,6 +159,15 @@ func Dialog(ctx context.Context, doc Document, opts DialogOptions) (*Job, Settin
 		return nil, Settings{}, err
 	}
 	return platform.dialog(ctx, doc, opts)
+}
+
+// fileOutputName reports printer names that stand for printers writing
+// files instead of paper.
+func fileOutputName(name string) bool {
+	n := strings.ToLower(strings.TrimSpace(name))
+	return strings.Contains(n, "print to pdf") || strings.Contains(n, "xps document writer") ||
+		strings.Contains(n, "onenote") || n == "pdf" || strings.Contains(n, "cups-pdf") ||
+		strings.Contains(n, "print to file")
 }
 
 func (d Document) validate() error {

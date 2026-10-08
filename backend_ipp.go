@@ -58,7 +58,7 @@ var printerAttrs = []string{
 	"printer-state", "printer-state-reasons",
 	"media-supported", "sides-supported", "color-supported", "print-color-mode-supported",
 	"printer-resolution-supported", "document-format-supported",
-	"media-source-supported", "print-quality-supported",
+	"media-source-supported", "print-quality-supported", "device-uri",
 }
 
 func (b ippBackend) printers(ctx context.Context) ([]Printer, error) {
@@ -95,6 +95,7 @@ func printerFromIPP(p ipp.Printer, def string) Printer {
 		Description: str("printer-info"),
 		Location:    str("printer-location"),
 		Default:     p.Name != "" && p.Name == def,
+		ToFile:      fileOutputName(p.Name) || fileDeviceURI(str("device-uri")),
 		Caps:        capsFromIPP(p.Attrs),
 	}
 }
@@ -111,6 +112,11 @@ func qualityFromIPP(v ipp.Value) (Quality, bool) {
 		return QualityHigh, true
 	}
 	return QualityDefault, false
+}
+
+// fileDeviceURI reports CUPS backends that write files.
+func fileDeviceURI(uri string) bool {
+	return strings.HasPrefix(uri, "cups-pdf:") || strings.HasPrefix(uri, "file:")
 }
 
 func capsFromIPP(attrs ipp.Attributes) Capabilities {

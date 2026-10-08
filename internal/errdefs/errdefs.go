@@ -13,4 +13,5 @@ var (
 	ErrWrongThread     = errors.New("goprint: must be called on the main thread")
 	ErrBusy            = errors.New("goprint: busy")
 	ErrInvalid         = errors.New("goprint: invalid argument")
+	ErrFileOutput      = errors.New("goprint: output to a file is not allowed")
 )

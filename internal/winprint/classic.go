@@ -39,6 +39,7 @@ const (
 	pdCollate                    = 0x10
 	pdUseDevModeCopiesAndCollate = 0x40000
 	pdNoCurrentPage              = 0x800000
+	pdHidePrintToFile            = 0x100000
 	startPageGeneral             = 0xFFFFFFFF
 	pdResultCancel               = 0
 	pdResultPrint                = 1
@@ -87,6 +88,11 @@ type ClassicOptions struct {
 	BaseDevMode []byte
 	PageRanges  []core.PageRange
 	PrintNow    bool
+	// HidePrintToFile hides the dialog's "Print to file" check box.
+	HidePrintToFile bool
+	// Accept, if set, vets the confirmed printer before anything is
+	// printed; its error is returned as is.
+	Accept func(printer string) error
 }
 
 // ClassicResult is the outcome of a confirmed classic dialog.
@@ -122,6 +128,11 @@ func ClassicDialog(ctx context.Context, src io.Reader, opts ClassicOptions) (*Cl
 		res, err = runClassic(ctx, data, opts)
 		return err
 	})
+	if err == nil && opts.Accept != nil {
+		if err := opts.Accept(res.Printer); err != nil {
+			return nil, err
+		}
+	}
 	if err != nil || !opts.PrintNow {
 		return res, err
 	}
@@ -191,6 +202,9 @@ func runClassic(ctx context.Context, data []byte, opts ClassicOptions) (*Classic
 		StartPage:     startPageGeneral,
 	}
 	pd.StructSize = uint32(unsafe.Sizeof(pd))
+	if opts.HidePrintToFile {
+		pd.Flags |= pdHidePrintToFile
+	}
 	for _, r := range opts.PageRanges {
 		if int(pd.NumPageRanges) == maxPageRanges {
 			break
