@@ -6,7 +6,7 @@ require (
 	fyne.io/fyne/v2 v2.8.1
 	github.com/timzifer/cera v0.6.0
 	github.com/timzifer/fyne-pdf v0.4.0
-	github.com/timzifer/goprint v0.4.1
+	github.com/timzifer/goprint v0.5.0
 )
 
 require (
