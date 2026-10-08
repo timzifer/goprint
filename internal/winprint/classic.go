@@ -358,6 +358,10 @@ func globalFree(h uintptr) {
 // LegacyDialogRedirected reports whether PrintDlgEx is shown as the modern
 // "print from a Win32 app" dialog, which ignores the printer preselection
 // in DEVNAMES (observed on Windows 11 24H2; DEVMODE settings still apply).
+// No workaround was found: the redirected dialog always starts on the
+// default printer, whether the printer is named in DEVNAMES, in
+// DEVMODE.dmDeviceName, in both or in neither, and it does not recall the
+// printer the user confirmed in an earlier run of the same executable.
 // Windows 11 redirects unless the user set PreferLegacyPrintDialog. To keep
 // RequirePrinter's promise, every Windows 11 build counts as redirected
 // unless that setting is present.
