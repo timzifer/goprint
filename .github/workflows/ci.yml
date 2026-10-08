@@ -235,9 +235,9 @@ jobs:
         with:
           go-version: stable
           cache-dependency-path: fyneprint/go.sum
-      - name: Install GL and X11 headers
+      - name: Install GL, X11 and Wayland headers
         if: runner.os == 'Linux'
-        run: sudo apt-get update -q && sudo apt-get install -y -q libgl1-mesa-dev xorg-dev
+        run: sudo apt-get update -q && sudo apt-get install -y -q libgl1-mesa-dev libegl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev
       - name: go mod tidy
         run: go mod tidy -diff
       - name: go vet

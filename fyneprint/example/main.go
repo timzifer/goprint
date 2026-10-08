@@ -31,7 +31,7 @@ func main() {
 	w := a.NewWindow("fyneprint example")
 	status := widget.NewLabel("Ready.")
 	status.Wrapping = fyne.TextWrapWord
-	printNow := widget.NewCheck("Print after confirming (off: only return the settings)", nil)
+	printNow := widget.NewCheck("Print after confirming (off: only return the settings; no preview on Windows)", nil)
 
 	report := func(job *goprint.Job, s goprint.Settings, err error) {
 		switch {
