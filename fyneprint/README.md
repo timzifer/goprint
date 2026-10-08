@@ -58,7 +58,12 @@ fyneprint.ShowPrintDialog(w, goprint.PDFFile("report.pdf"),
 - **Save as PDF** writes the selected pages, turned to the chosen orientation,
   instead of printing (`SaveLabel`, `SavePDF`, `NoSave`). Printers that write
   files ("Microsoft Print to PDF", CUPS-PDF, …) are hidden unless
-  `ShowFilePrinters` is set.
+  `ShowFilePrinters` is set. Pages are copied as they are, not re-rendered
+  ([cera](https://github.com/timzifer/cera)'s `pdfedit`); encrypted files
+  whose permissions forbid reassembling them cannot be saved in parts.
+- **Accessibility:** the dialog is drawn by Fyne. It works with the keyboard
+  (Tab moves between the controls), but Fyne has no screen reader support yet. Use
+  `ShowDialog` where that matters.
 - **Languages:** English and German built in. Apps add more with Fyne's
   `lang.AddTranslations…`, using the keys in
   [translations/fyneprint.de.json](translations/fyneprint.de.json).
