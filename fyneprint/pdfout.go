@@ -5,10 +5,8 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"strconv"
 
-	"github.com/pdfcpu/pdfcpu/pkg/api"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
+	"github.com/timzifer/cera/pdfedit"
 
 	"github.com/timzifer/goprint"
 	"github.com/timzifer/goprint/internal/core"
@@ -45,40 +43,23 @@ func savedPDF(ctx context.Context, data []byte, sizes []pageSize, s goprint.Sett
 	if len(pages) == 0 {
 		return nil, fmt.Errorf("%w: no pages selected", goprint.ErrInvalid)
 	}
-	conf := model.NewStatelessConfiguration()
-	conf.ValidationMode = model.ValidationRelaxed
-
-	out := data
-	if !allPagesInOrder(pages, len(sizes)) {
-		sel := make([]string, len(pages))
-		for i, p := range pages {
-			sel[i] = strconv.Itoa(p + 1)
-		}
-		var b bytes.Buffer
-		if err := api.Collect(ctx, bytes.NewReader(out), &b, sel, conf); err != nil {
-			return nil, fmt.Errorf("select pages: %w", err)
-		}
-		out = b.Bytes()
-	}
-
-	// Pages to turn, by angle; page numbers refer to the output.
-	turn := map[int][]string{}
+	sel := make([]pdfedit.Page, len(pages))
+	turned := false
 	for i, p := range pages {
-		if a := turnAngle(sizes[p], s.Orientation); a != 0 {
-			turn[a] = append(turn[a], strconv.Itoa(i+1))
-		}
+		sel[i] = pdfedit.Page{Index: p, Rotate: turnAngle(sizes[p], s.Orientation)}
+		turned = turned || sel[i].Rotate != 0
 	}
-	for _, a := range []int{90, 180, 270} {
-		if len(turn[a]) == 0 {
-			continue
-		}
-		var b bytes.Buffer
-		if err := api.Rotate(ctx, bytes.NewReader(out), &b, a, turn[a], conf); err != nil {
-			return nil, fmt.Errorf("rotate pages: %w", err)
-		}
-		out = b.Bytes()
+	if !turned && allPagesInOrder(pages, len(sizes)) {
+		return data, nil // the document as it is
 	}
-	return out, nil
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	var b bytes.Buffer
+	if err := pdfedit.Extract(&b, data, sel); err != nil {
+		return nil, fmt.Errorf("select pages: %w", err)
+	}
+	return b.Bytes(), nil
 }
 
 // turnAngle returns the clockwise rotation that gives a page of size sz the

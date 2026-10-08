@@ -4,9 +4,9 @@ go 1.26.4
 
 require (
 	fyne.io/fyne/v2 v2.8.1
-	github.com/pdfcpu/pdfcpu v0.16.1
+	github.com/timzifer/cera v0.6.0
 	github.com/timzifer/fyne-pdf v0.4.0
-	github.com/timzifer/goprint v0.3.0
+	github.com/timzifer/goprint v0.4.1
 )
 
 require (
@@ -41,7 +41,6 @@ require (
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/hack-pad/go-indexeddb v0.3.2 // indirect
 	github.com/hack-pad/safejs v0.1.0 // indirect
-	github.com/hhrutter/tiff v1.0.7 // indirect
 	github.com/jeandeaual/go-locale v0.0.0-20250612000132-0ef82f21eade // indirect
 	github.com/jsummers/gobmp v0.0.0-20230614200233-a9de23ed2e25 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
@@ -57,14 +56,11 @@ require (
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef // indirect
 	github.com/stretchr/testify v1.11.1 // indirect
 	github.com/tannevaled/gobig2 v0.2.0 // indirect
-	github.com/timzifer/cera v0.4.0 // indirect
 	github.com/timzifer/fyne_iconkit v0.1.0 // indirect
 	github.com/timzifer/fyne_lucide v1.2.0 // indirect
 	github.com/timzifer/fyne_tabler v1.2.0 // indirect
-	github.com/timzifer/stilus v0.8.0 // indirect
+	github.com/timzifer/stilus v0.9.0 // indirect
 	github.com/yuin/goldmark v1.8.2 // indirect
-	go.yaml.in/yaml/v3 v3.0.5 // indirect
-	golang.org/x/crypto v0.57.0 // indirect
 	golang.org/x/image v0.46.0 // indirect
 	golang.org/x/net v0.59.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
