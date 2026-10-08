@@ -1,19 +1,3 @@
-// Package goprint prints documents on Linux/BSD, macOS and Windows through
-// one API, either headless or through the platform's native print dialog.
-//
-// The package is pure Go: it builds with CGO_ENABLED=0 for every supported
-// GOOS/GOARCH from any host. Documents are handled as PDF internally; raster
-// sources ([]image.Image) are wrapped into an image-only PDF so that there is
-// a single print path.
-//
-// The API has three verbs:
-//
-//   - [Printers] and [GetCapabilities] for discovery,
-//   - [Print] for headless printing,
-//   - [Dialog] for interactive printing through the native dialog.
-//
-// [Settings] flows both ways: into [Dialog] as presets, out of it as the
-// user's choice.
 package goprint
 
 import (
