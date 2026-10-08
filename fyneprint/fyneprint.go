@@ -17,6 +17,10 @@
 //				}
 //			})
 //	})
+//
+// [ShowPrintDialog] is an alternative to the platform's dialog: a print
+// dialog drawn by Fyne, with a preview and a "Save as PDF" button, that
+// prints through goprint's headless [goprint.Print].
 package fyneprint
 
 import (
