@@ -4,7 +4,7 @@ go 1.26.0
 
 require (
 	fyne.io/fyne/v2 v2.8.1
-	github.com/timzifer/goprint v0.2.0
+	github.com/timzifer/goprint v0.3.0
 )
 
 require (
