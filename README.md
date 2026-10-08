@@ -18,7 +18,7 @@ headless or through the native print dialog.
   orientation, duplex, color, collation – and the user's choice comes back as
   structured `Settings`. On Windows the modern dialog with live preview is supported.
 
-> **Status:** early development, the API is not stable yet.
+> **Status:** 0.x preview releases; the API may still change before v1.0.
 >
 > | Feature | Linux/BSD | macOS | Windows |
 > |---|---|---|---|
@@ -29,13 +29,17 @@ headless or through the native print dialog.
 >
 > Unimplemented parts return `ErrUnsupported` / `ErrNoDialog`.
 
+## Install
+
+```sh
+go get github.com/timzifer/goprint
+go get github.com/timzifer/goprint/fyneprint   # Fyne apps only
+```
+
 ## Usage
 
 ```go
-doc := goprint.Document{
-	Title: "Invoice 4711",
-	PDF:   func() (io.ReadSeekCloser, error) { return os.Open("invoice.pdf") },
-}
+doc := goprint.PDFFile("invoice.pdf") // or PDFBytes, or Document{PDF: …} / {Images: …}
 
 // Headless
 job, err := goprint.Print(ctx, doc, goprint.Settings{
@@ -59,7 +63,17 @@ job, chosen, err := goprint.Dialog(ctx, doc, goprint.DialogOptions{
 if errors.Is(err, goprint.ErrCanceled) {
 	// user canceled
 }
+
+// Settings only ("page setup"), print later without UI
+_, chosen, err = goprint.Dialog(ctx, doc, goprint.DialogOptions{})
+job, err = goprint.Print(ctx, doc, chosen)
 ```
+
+Settings a printer cannot honor are reported by `job.Warnings()`; with
+`Settings.Strict` they fail the call with `ErrUnsupported` instead. Errors
+wrap sentinels (`ErrCanceled`, `ErrPrinterNotFound`, `ErrNoDialog`, …) for
+`errors.Is`. More examples are in the
+[package documentation](https://pkg.go.dev/github.com/timzifer/goprint).
 
 On Linux/BSD, `Dialog` shows the desktop's print dialog through
 xdg-desktop-portal (`org.freedesktop.portal.Print`), so it also works in
@@ -73,8 +87,10 @@ On Windows, the modern print dialog cannot preselect a printer. Windows 11
 also shows the classic dialog (`PrintDlgEx`) as its modern dialog and then
 ignores the preselection, so `DialogOptions.RequirePrinter` returns
 `ErrUnsupported` there. `StyleAuto` uses the modern dialog (with preview)
-for printing and the classic one for `PrintNow == false`, which creates no
-job and so never asks print-to-file printers for a file name.
+for printing and the classic one for `PrintNow == false`: only the classic
+dialog reports the chosen printer, and it creates no job, so print-to-file
+printers never ask for a file name. It has no preview (see
+[#18](https://github.com/timzifer/goprint/issues/18)).
 
 On Windows, `Settings.Vendor[goprint.VendorOutputFile]` writes the printer
 output to a file instead of the device, e.g. to get a PDF from

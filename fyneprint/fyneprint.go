@@ -10,8 +10,7 @@
 // goroutine.
 //
 //	btn := widget.NewButton("Print…", func() {
-//		doc := goprint.Document{Title: "Report", PDF: func() (io.ReadSeekCloser, error) { return os.Open("report.pdf") }}
-//		fyneprint.ShowDialog(w, doc, goprint.DialogOptions{PrintNow: true},
+//		fyneprint.ShowDialog(w, goprint.PDFFile("report.pdf"), goprint.DialogOptions{PrintNow: true},
 //			func(job *goprint.Job, s goprint.Settings, err error) {
 //				if err != nil && !errors.Is(err, goprint.ErrCanceled) {
 //					dialog.ShowError(err, w)
