@@ -18,6 +18,8 @@ import (
 	"time"
 	"unsafe"
 
+	"golang.org/x/sys/windows"
+
 	"github.com/timzifer/goprint/internal/errdefs"
 	"github.com/timzifer/goprint/internal/testpdf"
 )
@@ -139,11 +141,14 @@ func TestPrintSettingsToPDF(t *testing.T) {
 	defer func() { Tracef = nil }()
 	for _, tc := range []struct {
 		name string
+		base *JobSettings // builds Options.BaseDevMode
 		s    JobSettings
 		w, h float64 // expected MediaBox in points
 	}{
-		{"A5 portrait", JobSettings{PaperWidth: 148000, PaperHeight: 210000, Orientation: dmOrientPortrait}, 419.5, 595.3},
-		{"A4 landscape", JobSettings{PaperWidth: 210000, PaperHeight: 297000, Orientation: dmOrientLandscape}, 841.9, 595.3},
+		{"A5 portrait", nil, JobSettings{PaperWidth: 148000, PaperHeight: 210000, Orientation: dmOrientPortrait}, 419.5, 595.3},
+		{"A4 landscape", nil, JobSettings{PaperWidth: 210000, PaperHeight: 297000, Orientation: dmOrientLandscape}, 841.9, 595.3},
+		{"A5 landscape from base", &a5Landscape, JobSettings{}, 595.3, 419.5},
+		{"base overridden", &a5Landscape, JobSettings{Orientation: dmOrientPortrait}, 419.5, 595.3},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			out := filepath.Join(t.TempDir(), "out.pdf")
@@ -153,8 +158,15 @@ func TestPrintSettingsToPDF(t *testing.T) {
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 			defer cancel()
+			var base []byte
+			if tc.base != nil {
+				var err error
+				if base, _, err = BuildDevMode(pdfPrinter, *tc.base); err != nil {
+					t.Fatal(err)
+				}
+			}
 			src := bytes.NewReader(testpdf.Generate(1, testpdf.A4Width, testpdf.A4Height))
-			job, err := Print(ctx, src, Options{Printer: pdfPrinter, Title: "settings", OutputFile: out, Settings: tc.s})
+			job, err := Print(ctx, src, Options{Printer: pdfPrinter, Title: "settings", OutputFile: out, Settings: tc.s, BaseDevMode: base})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -175,6 +187,53 @@ func TestPrintSettingsToPDF(t *testing.T) {
 				t.Errorf("MediaBox %.1fx%.1f, want %.1fx%.1f", w, h, tc.w, tc.h)
 			}
 		})
+	}
+}
+
+var a5Landscape = JobSettings{PaperWidth: 148000, PaperHeight: 210000, Orientation: dmOrientLandscape}
+
+func TestBuildDevModeFrom(t *testing.T) {
+	requirePrinter(t, pdfPrinter)
+	base, _, err := BuildDevMode(pdfPrinter, a5Landscape)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dm, warns, err := BuildDevModeFrom(pdfPrinter, base, JobSettings{Copies: 2})
+	if err != nil || len(warns) > 0 {
+		t.Fatalf("BuildDevModeFrom: %v, warnings %v", err, warns)
+	}
+	got := readDevMode(pdfPrinter, dm)
+	if got.Orientation != dmOrientLandscape || got.PaperWidth != 148000 || got.Copies != 2 {
+		t.Errorf("got %+v, want A5 landscape from the base and 2 copies", got)
+	}
+
+	other := bytes.Clone(base)
+	copy(asDevMode(other).DeviceName[:], windows.StringToUTF16("Another printer"))
+	for name, b := range map[string][]byte{"other printer": other, "truncated": base[:40]} {
+		dm, warns, err := BuildDevModeFrom(pdfPrinter, b, JobSettings{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(warns) != 1 || warns[0].Setting != DevModeSetting {
+			t.Errorf("%s: warnings %v, want one for %s", name, warns, DevModeSetting)
+		}
+		if readDevMode(pdfPrinter, dm).Orientation == dmOrientLandscape {
+			t.Errorf("%s: base was used", name)
+		}
+	}
+}
+
+func TestCheckDevModeLongName(t *testing.T) {
+	long := strings.Repeat("x", 40)
+	dm := make([]byte, unsafe.Sizeof(devMode{}))
+	d := asDevMode(dm)
+	d.Size = uint16(len(dm))
+	copy(d.DeviceName[:31], windows.StringToUTF16(long[:31]))
+	if err := checkDevMode(long, dm); err != nil {
+		t.Errorf("truncated device name: %v", err)
+	}
+	if err := checkDevMode(long[:30], dm); err == nil {
+		t.Error("shorter printer name accepted")
 	}
 }
 

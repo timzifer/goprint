@@ -51,3 +51,25 @@ func TestDialogInteractive(t *testing.T) {
 		t.Logf("job %s on %q", res.Job.ID(), res.Job.Printer())
 	}
 }
+
+// TestPropertiesInteractive opens the driver dialog of the PDF printer,
+// preset to A5 landscape, and logs what the user confirms.
+func TestPropertiesInteractive(t *testing.T) {
+	if os.Getenv("GOPRINT_DIALOG") == "" {
+		t.Skip("set GOPRINT_DIALOG=1 for the interactive dialog test")
+	}
+	requirePrinter(t, pdfPrinter)
+	Tracef = t.Logf
+	defer func() { Tracef = nil }()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+	res, err := PropertiesDialog(ctx, 0, pdfPrinter, nil, a5Landscape)
+	if errors.Is(err, errdefs.ErrCanceled) {
+		t.Log("canceled by user")
+		return
+	}
+	if err != nil {
+		t.Fatalf("PropertiesDialog: %v", err)
+	}
+	t.Logf("printer %q, %d bytes DEVMODE, chosen %+v, warnings %v", res.Printer, len(res.DevMode), res.Chosen, res.Warnings)
+}

@@ -81,10 +81,12 @@ type ClassicOptions struct {
 	Owner   windows.HWND
 	Title   string
 	Printer string // preselected printer; empty = default
-	// Settings preset the dialog through the printer's DEVMODE.
-	Settings   JobSettings
-	PageRanges []core.PageRange
-	PrintNow   bool
+	// Settings preset the dialog through the printer's DEVMODE, or through
+	// BaseDevMode if set (e.g. from PropertiesDialog).
+	Settings    JobSettings
+	BaseDevMode []byte
+	PageRanges  []core.PageRange
+	PrintNow    bool
 }
 
 // ClassicResult is the outcome of a confirmed classic dialog.
@@ -94,8 +96,8 @@ type ClassicResult struct {
 	PageRanges []core.PageRange
 	Warnings   []Warning // presets the printer could not take
 	Job        *Job      // nil unless PrintNow
-
-	devMode []byte
+	// DevMode is the confirmed DEVMODE, driver-private parts included.
+	DevMode []byte
 }
 
 // ClassicDialog shows PrintDlgExW for the PDF from src.
@@ -124,14 +126,13 @@ func ClassicDialog(ctx context.Context, src io.Reader, opts ClassicOptions) (*Cl
 		return res, err
 	}
 	// Print with exactly what the user confirmed.
-	dm, err := encodeDevModeFor(res)
-	if err != nil {
-		return nil, err
+	if len(res.DevMode) == 0 {
+		return nil, fmt.Errorf("winprint: dialog returned no DEVMODE")
 	}
 	job, err := Print(ctx, bytes.NewReader(data), Options{
 		Printer:    res.Printer,
 		Title:      opts.Title,
-		DevMode:    dm,
+		DevMode:    res.DevMode,
 		PageRanges: res.PageRanges,
 	})
 	if err != nil {
@@ -139,14 +140,6 @@ func ClassicDialog(ctx context.Context, src io.Reader, opts ClassicOptions) (*Cl
 	}
 	res.Job = job
 	return res, nil
-}
-
-// encodeDevModeFor returns the DEVMODE captured with the result.
-func encodeDevModeFor(r *ClassicResult) ([]byte, error) {
-	if len(r.devMode) == 0 {
-		return nil, fmt.Errorf("winprint: dialog returned no DEVMODE")
-	}
-	return r.devMode, nil
 }
 
 func runClassic(ctx context.Context, data []byte, opts ClassicOptions) (*ClassicResult, error) {
@@ -157,7 +150,7 @@ func runClassic(ctx context.Context, data []byte, opts ClassicOptions) (*Classic
 	pages := doc.pages
 	doc.Close()
 
-	dm, warns, err := BuildDevMode(opts.Printer, opts.Settings)
+	dm, warns, err := BuildDevModeFrom(opts.Printer, opts.BaseDevMode, opts.Settings)
 	if err != nil {
 		return nil, err
 	}
@@ -230,7 +223,7 @@ func runClassic(ctx context.Context, data []byte, opts ClassicOptions) (*Classic
 		res.Printer = opts.Printer
 	}
 	if b, err := globalBytes(hDevMode); err == nil && len(b) >= int(unsafe.Sizeof(devMode{})) {
-		res.devMode = b
+		res.DevMode = b
 		res.Chosen = readDevMode(res.Printer, b)
 	}
 	if pd.Flags&pdPageNums != 0 {

@@ -211,6 +211,10 @@ func (ippBackend) dialog(context.Context, Document, DialogOptions) (*Job, Settin
 	return nil, Settings{}, fmt.Errorf("%w: not implemented on this platform yet", ErrNoDialog)
 }
 
+func (ippBackend) properties(context.Context, Settings, uintptr) (Settings, error) {
+	return Settings{}, fmt.Errorf("%w: printers have no driver dialog on this platform", ErrUnsupported)
+}
+
 // ippJobAttributes maps settings to IPP job template attributes. It reports
 // settings that cannot be expressed.
 func ippJobAttributes(s Settings) (ipp.Attributes, []Warning) {

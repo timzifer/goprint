@@ -62,7 +62,10 @@ fyneprint.ShowPrintDialog(w, goprint.PDFFile("report.pdf"),
 - **Languages:** English and German built in. Apps add more with Fyne's
   `lang.AddTranslations…`, using the keys in
   [translations/fyneprint.de.json](translations/fyneprint.de.json).
-- No driver-specific options: use `ShowDialog` where users need them.
+- **Driver options:** for printers with a driver dialog (Windows) a
+  "Properties…" button opens it (`goprint.PrinterProperties`). The choices
+  there, finishing and other vendor features included, are shown in the
+  dialog where it has a control for them and printed along.
 
 `go run ./example` starts a small app that prints a generated PDF or a capture
 of its own window, with the platform's dialog or Fyne's own. Requires Fyne ≥ 2.6,

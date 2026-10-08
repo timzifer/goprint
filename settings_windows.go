@@ -3,6 +3,9 @@
 package goprint
 
 import (
+	"encoding/base64"
+	"maps"
+
 	"github.com/timzifer/goprint/internal/core"
 	"github.com/timzifer/goprint/internal/winprint"
 )
@@ -84,7 +87,7 @@ func toJobSettings(s Settings) (winprint.JobSettings, []Warning) {
 		warn("Credentials", "not used for windows printers")
 	}
 	for k := range s.Vendor {
-		if k != VendorOutputFile {
+		if k != VendorOutputFile && k != VendorDevMode {
 			warn("Vendor["+k+"]", "not supported on windows")
 		}
 	}
@@ -97,6 +100,7 @@ func capsFromWin(c winprint.Caps) Capabilities {
 		Color:         c.Color,
 		Formats:       []string{"application/pdf"},
 		DialogPreview: true,
+		DriverDialog:  true,
 	}
 	seen := map[string]bool{}
 	for _, p := range c.Papers {
@@ -115,6 +119,30 @@ func capsFromWin(c winprint.Caps) Capabilities {
 		}
 	}
 	return out
+}
+
+// baseDevMode decodes s.Vendor[VendorDevMode]; nil if unset or invalid.
+func baseDevMode(s Settings) ([]byte, []Warning) {
+	v, ok := s.Vendor[VendorDevMode]
+	if !ok {
+		return nil, nil
+	}
+	dm, err := base64.StdEncoding.DecodeString(v)
+	if err != nil || len(dm) == 0 {
+		return nil, []Warning{{"Vendor[" + VendorDevMode + "]", "not a base64 DEVMODE; using the printer defaults"}}
+	}
+	return dm, nil
+}
+
+// withDevMode returns s with dm as s.Vendor[VendorDevMode], leaving the
+// caller's map alone.
+func withDevMode(s Settings, dm []byte) Settings {
+	s.Vendor = maps.Clone(s.Vendor)
+	if s.Vendor == nil {
+		s.Vendor = map[string]string{}
+	}
+	s.Vendor[VendorDevMode] = base64.StdEncoding.EncodeToString(dm)
+	return s
 }
 
 func fromWinWarnings(ws []winprint.Warning) []Warning {

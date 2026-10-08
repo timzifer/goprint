@@ -52,6 +52,9 @@ type Options struct {
 	// Settings are applied through a DEVMODE converted into the job's
 	// PrintTicket (ignored if Ticket is set).
 	Settings JobSettings
+	// BaseDevMode, if set, replaces the printer's default DEVMODE that
+	// Settings are applied to (e.g. from PropertiesDialog).
+	BaseDevMode []byte
 	// DevMode, if set, is used as is (e.g. from a dialog) instead of
 	// Settings; pages are laid out on its paper.
 	DevMode []byte
@@ -301,12 +304,12 @@ func (j *Job) spool(ctx context.Context, src io.Reader, opts Options) error {
 			return fmt.Errorf("print ticket: %w", err)
 		}
 		lay = paperLayout{Paper: paperDIPs(opts.Printer, opts.DevMode)}
-	} else if len(opts.Ticket) == 0 && !opts.Settings.isZero() {
-		dm, warns, err := BuildDevMode(opts.Printer, opts.Settings)
+	} else if len(opts.Ticket) == 0 && (!opts.Settings.isZero() || len(opts.BaseDevMode) > 0) {
+		dm, warns, err := BuildDevModeFrom(opts.Printer, opts.BaseDevMode, opts.Settings)
 		if err != nil {
 			return err
 		}
-		if opts.Settings.wantsLayout() {
+		if opts.Settings.wantsLayout() || len(opts.BaseDevMode) > 0 {
 			lay = paperLayout{Paper: paperDIPs(opts.Printer, dm), Scaling: opts.Settings.Scaling}
 		}
 		j.warnings = append(j.warnings, warns...)

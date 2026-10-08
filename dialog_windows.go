@@ -228,6 +228,8 @@ func (windowsBackend) dialog(ctx context.Context, doc Document, opts DialogOptio
 // preview, and no job unless PrintNow.
 func classicDialog(ctx context.Context, src io.Reader, title string, opts DialogOptions) (*Job, Settings, error) {
 	js, warnings := toJobSettings(opts.Settings)
+	dm, dmWarnings := baseDevMode(opts.Settings)
+	warnings = append(warnings, dmWarnings...)
 	if opts.Settings.Printer != "" && winprint.LegacyDialogRedirected() {
 		warnings = append(warnings, Warning{"Printer", "this Windows print dialog cannot preselect a printer"})
 	}
@@ -235,18 +237,19 @@ func classicDialog(ctx context.Context, src io.Reader, title string, opts Dialog
 		return nil, Settings{}, fmt.Errorf("%w: %s", ErrUnsupported, warnings[0])
 	}
 	res, err := winprint.ClassicDialog(ctx, src, winprint.ClassicOptions{
-		Owner:      windows.HWND(opts.Owner),
-		Title:      title,
-		Printer:    opts.Settings.Printer,
-		Settings:   js,
-		PageRanges: corePageRanges(opts.Settings.PageRanges),
-		PrintNow:   opts.PrintNow,
+		Owner:       windows.HWND(opts.Owner),
+		Title:       title,
+		Printer:     opts.Settings.Printer,
+		Settings:    js,
+		BaseDevMode: dm,
+		PageRanges:  corePageRanges(opts.Settings.PageRanges),
+		PrintNow:    opts.PrintNow,
 	})
 	if err != nil {
 		return nil, Settings{}, err
 	}
 	warnings = append(warnings, fromWinWarnings(res.Warnings)...)
-	chosen := fromJobSettings(res.Chosen, opts.Settings)
+	chosen := withDevMode(fromJobSettings(res.Chosen, opts.Settings), res.DevMode)
 	chosen.Printer = res.Printer
 	chosen.PageRanges = nil
 	for _, r := range res.PageRanges {

@@ -35,7 +35,12 @@
 // [Job.Warnings]. With [Settings.Strict] they are errors wrapping
 // [ErrUnsupported] instead, and nothing is printed. [Settings.Vendor]
 // passes platform-specific values through (IPP attributes on Linux/BSD and
-// macOS, see also [VendorOutputFile] and [VendorGTKPrefix]).
+// macOS, see also [VendorOutputFile], [VendorGTKPrefix] and
+// [VendorDevMode]).
+//
+// On Windows, [PrinterProperties] opens the driver's own settings dialog
+// for what Settings has no field for (finishing, stapling, secure print,
+// ...); the result travels to [Print] in Settings.Vendor[VendorDevMode].
 //
 // # Errors
 //
