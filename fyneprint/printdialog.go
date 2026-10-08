@@ -530,8 +530,7 @@ func (d *printDialog) renderPreview(s goprint.Settings, pages []int) {
 	if d.previewPage < len(pages)-1 {
 		d.next.Enable()
 	}
-	d.pageLabel.SetText(tr("sheet", "Sheet {{.N}} of {{.Total}} (page {{.Page}})",
-		map[string]any{"N": d.previewPage + 1, "Total": len(pages), "Page": pages[d.previewPage] + 1}))
+	d.pageLabel.SetText(sheetLabel(d.previewPage+1, len(pages), pages[d.previewPage]+1))
 
 	if d.previewCancel != nil {
 		d.previewCancel()
@@ -556,6 +555,11 @@ func (d *printDialog) renderPreview(s goprint.Settings, pages []int) {
 			d.sheet.Refresh()
 		})
 	})
+}
+
+// sheetLabel names sheet n of total, which shows page (1-based).
+func sheetLabel(n, total, page int) string {
+	return tr("sheet", "Sheet {{.N}} of {{.Total}} (page {{.Page}})", map[string]any{"N": n, "Total": total, "Page": page})
 }
 
 func (d *printDialog) confirm() {

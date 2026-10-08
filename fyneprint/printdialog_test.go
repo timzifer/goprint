@@ -249,7 +249,7 @@ func TestPrintDialogPrints(t *testing.T) {
 	if b := d.sheet.Image.Bounds(); b.Dx() <= b.Dy() {
 		t.Errorf("landscape preview is %v", b)
 	}
-	if want := tr("sheet", "", map[string]any{"N": 1, "Total": 2, "Page": 2}); d.pageLabel.Text != want {
+	if want := sheetLabel(1, 2, 2); d.pageLabel.Text != want {
 		t.Errorf("page label %q", d.pageLabel.Text)
 	}
 	test.Tap(d.ok)
