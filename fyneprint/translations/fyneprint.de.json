@@ -20,6 +20,7 @@
   "fyneprint.tray.manual": "Manueller Einzug",
   "fyneprint.tray.n": "Fach {{.N}}",
   "fyneprint.printer.default": "{{.Name}} (Standard)",
+  "fyneprint.printer.provider": "{{.Name}} ({{.Provider}})",
   "fyneprint.copies": "Kopien",
   "fyneprint.paper": "Papierformat",
   "fyneprint.paper.default": "Druckerstandard",

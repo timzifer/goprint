@@ -21,6 +21,7 @@ import (
 
 	"github.com/timzifer/goprint"
 	"github.com/timzifer/goprint/internal/testpdf"
+	"github.com/timzifer/goprint/virtualprinter"
 )
 
 func TestParseRanges(t *testing.T) {
@@ -162,38 +163,72 @@ func TestSavedPDFFromImages(t *testing.T) {
 	}
 }
 
-// fakePrinters stubs everything that would reach a printer and makes the
-// dialog's background work synchronous.
+// fakePrinters is the provider of the tests: it stubs everything that
+// would reach a printer. It takes the System provider's name "", so that
+// settings without a provider select it.
 type fakePrinters struct {
+	t       *testing.T
+	list    []goprint.Printer
 	printed []goprint.Settings
+	// properties answers the driver dialog; nil fails the test.
+	properties func(goprint.Settings) (goprint.Settings, error)
 }
 
+func (f *fakePrinters) Name() string { return "" }
+
+func (f *fakePrinters) Printers(context.Context) ([]goprint.Printer, error) { return f.list, nil }
+
+func (f *fakePrinters) Capabilities(_ context.Context, name string) (goprint.Capabilities, error) {
+	c := goprint.Capabilities{Media: []goprint.Media{goprint.MediaA4, goprint.MediaA5}, Duplex: name == "Office", Color: true, DriverDialog: name == "Office"}
+	if name == "Office" {
+		c.Trays = []string{"auto", "tray-1", "Fach 9"}
+		c.Qualities = []goprint.Quality{goprint.QualityDraft, goprint.QualityNormal}
+	}
+	return c, nil
+}
+
+func (f *fakePrinters) Print(_ context.Context, _ goprint.Document, s goprint.Settings) (*goprint.Job, error) {
+	f.printed = append(f.printed, s)
+	return nil, nil
+}
+
+func (f *fakePrinters) Properties(_ context.Context, s goprint.Settings, _ uintptr) (goprint.Settings, error) {
+	if f.properties == nil {
+		f.t.Fatal("unexpected driver dialog")
+	}
+	return f.properties(s)
+}
+
+// stubPrinters makes a fakePrinters with list goprint.Default and the
+// dialog's background work synchronous.
 func stubPrinters(t *testing.T, list []goprint.Printer) *fakePrinters {
 	t.Helper()
-	f := &fakePrinters{}
-	savedPrinters, savedCaps, savedPrint, savedProps, savedAsync := printersFunc, capsFunc, printFunc, propertiesFunc, runAsync
-	printersFunc = func(context.Context) ([]goprint.Printer, error) { return list, nil }
-	capsFunc = func(_ context.Context, name string) (goprint.Capabilities, error) {
-		c := goprint.Capabilities{Media: []goprint.Media{goprint.MediaA4, goprint.MediaA5}, Duplex: name == "Office", Color: true, DriverDialog: name == "Office"}
-		if name == "Office" {
-			c.Trays = []string{"auto", "tray-1", "Fach 9"}
-			c.Qualities = []goprint.Quality{goprint.QualityDraft, goprint.QualityNormal}
-		}
-		return c, nil
-	}
-	propertiesFunc = func(context.Context, goprint.Settings, uintptr) (goprint.Settings, error) {
-		t.Fatal("unexpected driver dialog")
-		return goprint.Settings{}, nil
-	}
-	printFunc = func(_ context.Context, _ goprint.Document, s goprint.Settings) (*goprint.Job, error) {
-		f.printed = append(f.printed, s)
-		return nil, nil
-	}
+	f := &fakePrinters{t: t, list: list}
+	savedDefault, savedAsync := goprint.Default, runAsync
+	goprint.Default = goprint.NewClient(f)
 	runAsync = func(f func()) { f() }
-	t.Cleanup(func() {
-		printersFunc, capsFunc, printFunc, propertiesFunc, runAsync = savedPrinters, savedCaps, savedPrint, savedProps, savedAsync
-	})
+	t.Cleanup(func() { goprint.Default, runAsync = savedDefault, savedAsync })
 	return f
+}
+
+// noPrinter is goprint.Default while no test stubs it: tests must never
+// reach a real printer.
+type noPrinter struct{}
+
+func (noPrinter) Name() string { return "" }
+func (noPrinter) Printers(context.Context) ([]goprint.Printer, error) {
+	return nil, errors.New("test reached goprint.Default without stubPrinters")
+}
+func (noPrinter) Capabilities(context.Context, string) (goprint.Capabilities, error) {
+	return goprint.Capabilities{}, errors.New("test reached goprint.Default without stubPrinters")
+}
+func (noPrinter) Print(context.Context, goprint.Document, goprint.Settings) (*goprint.Job, error) {
+	panic("test reached goprint.Default without stubPrinters")
+}
+
+func TestMain(m *testing.M) {
+	goprint.Default = goprint.NewClient(noPrinter{})
+	os.Exit(m.Run())
 }
 
 var testPrinters = []goprint.Printer{
@@ -282,7 +317,7 @@ func TestPrintDialogProperties(t *testing.T) {
 		s.Vendor = map[string]string{goprint.VendorDevMode: "AAAA"}
 		return s, nil
 	}
-	propertiesFunc = func(_ context.Context, s goprint.Settings, _ uintptr) (goprint.Settings, error) {
+	f.properties = func(s goprint.Settings) (goprint.Settings, error) {
 		asked = append(asked, s)
 		if len(asked) == 2 {
 			return goprint.Settings{}, goprint.ErrCanceled
@@ -558,5 +593,49 @@ func TestTranslations(t *testing.T) {
 				t.Errorf("%s: unknown %s", f.Name(), k)
 			}
 		}
+	}
+}
+
+func TestPrintDialogProviders(t *testing.T) {
+	f := stubPrinters(t, testPrinters)
+	vp := virtualprinter.New("virtual", virtualprinter.Office("Office"), virtualprinter.Label("Label"))
+	c := goprint.NewClient(f, vp)
+
+	// The same name at two providers: Settings.Provider picks the printer.
+	d, r := openTestDialog(t, a4Doc(1), PrintDialogOptions{
+		Client: c, PrintNow: true,
+		Settings: goprint.Settings{Provider: "virtual", Printer: "Office"},
+	})
+	want := []string{
+		d.printerLabel(testPrinters[1]), "Lab",
+		d.t("printer.provider", map[string]any{"Name": "Office", "Provider": "virtual"}),
+		d.t("printer.provider", map[string]any{"Name": "Label", "Provider": "virtual"}),
+	}
+	if !reflect.DeepEqual(d.printer.Options, want) {
+		t.Fatalf("printers = %q, want %q", d.printer.Options, want)
+	}
+	if d.s.Provider != "virtual" || d.s.Printer != "Office" || d.printer.SelectedIndex() != 2 {
+		t.Fatalf("selected %q/%q at %d", d.s.Provider, d.s.Printer, d.printer.SelectedIndex())
+	}
+	test.Tap(d.ok)
+	if !r.called || r.err != nil || len(f.printed) != 0 || len(vp.Jobs()) != 1 || vp.Jobs()[0].Printer != "Office" {
+		t.Fatalf("done %+v, system printed %d, virtual %d", r, len(f.printed), len(vp.Jobs()))
+	}
+	if r.s.Provider != "virtual" {
+		t.Errorf("chosen provider %q", r.s.Provider)
+	}
+
+	// Picking a system printer moves the provider along.
+	d, r = openTestDialog(t, a4Doc(1), PrintDialogOptions{Client: c, Settings: goprint.Settings{Provider: "virtual", Printer: "Label"}})
+	d.printer.SetSelectedIndex(1)
+	test.Tap(d.ok)
+	if r.err != nil || r.s.Provider != "" || r.s.Printer != "Lab" {
+		t.Errorf("chosen %q/%q, %v", r.s.Provider, r.s.Printer, r.err)
+	}
+
+	// A name that exists only at another provider is not the preset.
+	_, r = openTestDialog(t, a4Doc(1), PrintDialogOptions{Client: c, RequirePrinter: true, Settings: goprint.Settings{Printer: "Label"}})
+	if !errors.Is(r.err, goprint.ErrPrinterNotFound) {
+		t.Errorf("system Label: %v, want ErrPrinterNotFound", r.err)
 	}
 }
