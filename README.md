@@ -117,7 +117,7 @@ store it to reuse the choice later, but only for the same printer.
 The package-level functions print through `goprint.Default`, a `Client` with
 only the `System()` provider (CUPS, the Windows spooler, IPP URIs). A
 `Client` can combine further providers that implement `goprint.Provider`,
-such as simulated printers. `Printer.Provider` tells where a printer comes
+such as the simulated printers of `goprint/virtualprinter`. `Printer.Provider` tells where a printer comes
 from; `Settings.Provider` selects the provider that prints (empty: the system).
 
 ```go
@@ -129,6 +129,19 @@ job, err := c.Print(ctx, doc, goprint.Settings{Provider: "virtual", Printer: "La
 Programs may also replace `goprint.Default` before they print. Providers
 create their jobs with `goprint.NewJob`; implementing `DialogProvider` or
 `PropertiesProvider` adds a dialog or a driver dialog.
+
+`goprint/virtualprinter` simulates printers without hardware, for tests,
+demos and development: jobs are kept in memory as PDF, settings a printer
+cannot honor become warnings, and failures are scripted (offline printers,
+failing or held jobs, latency). Presets: `Office`, `Label`, `Photo`,
+`Receipt`, `PDFWriter`.
+
+```go
+vp := virtualprinter.New("virtual", virtualprinter.Office("Office"), virtualprinter.Label("Label-62"))
+goprint.Default = goprint.NewClient(goprint.System(), vp)
+// ... print with Settings{Provider: "virtual", Printer: "Label-62"}
+pdf := vp.Jobs()[0].PDF
+```
 
 ### macOS: main thread
 
@@ -172,6 +185,7 @@ returned `Job` cannot be tracked and reports completed.
 | `goprint`         | Public API, types, errors                               |
 | `goprint/ipp`     | IPP codec and client (RFC 8010/8011), usable standalone |
 | `goprint/ipp/ipptest` | IPP mock server for tests                           |
+| `goprint/virtualprinter` | Simulated printers as a `Provider`: jobs kept in memory as PDF, scripted failures |
 | `goprint/fyneprint` | [Fyne](https://fyne.io) integration (separate module) |
 
 ## Fyne
