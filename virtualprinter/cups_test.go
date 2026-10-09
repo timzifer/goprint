@@ -1,7 +1,11 @@
 package virtualprinter
 
 import (
+	"bytes"
 	"context"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,6 +14,7 @@ import (
 	"time"
 
 	"github.com/timzifer/goprint"
+	"github.com/timzifer/goprint/ipp"
 )
 
 // TestCUPSPrintsToServer adds the server as an IPP Everywhere queue to the
@@ -34,9 +39,22 @@ func TestCUPSPrintsToServer(t *testing.T) {
 	}
 
 	vp := New("v", Office("Office"))
-	srv := serve(t, vp)
+	// Log the job attributes CUPS sends.
+	h := vp.Handler()
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		data, _ := io.ReadAll(r.Body)
+		if m, err := ipp.Decode(bytes.NewReader(data)); err == nil {
+			if g := m.Group(ipp.TagJobGroup); g != nil {
+				t.Logf("%s job attributes: %v", m.Operation(), g.Attrs)
+			}
+		}
+		r.Body = io.NopCloser(bytes.NewReader(data))
+		h.ServeHTTP(w, r)
+	}))
+	t.Cleanup(ts.Close)
+	uri := "ipp" + strings.TrimPrefix(ts.URL, "http") + printerPath("Office")
 	const queue = "goprint-virtual"
-	run(append(lpadmin, "-p", queue, "-E", "-v", srv.PrinterURI("Office"), "-m", "everywhere")...)
+	run(append(lpadmin, "-p", queue, "-E", "-v", uri, "-m", "everywhere")...)
 	t.Cleanup(func() { _ = exec.Command(lpadmin[0], append(lpadmin[1:], "-x", queue)...).Run() })
 
 	file := filepath.Join(t.TempDir(), "doc.pdf")
