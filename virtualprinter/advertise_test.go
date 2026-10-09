@@ -48,7 +48,8 @@ func TestAdvertiseFindAndPrint(t *testing.T) {
 	if os.Getenv("GOPRINT_MDNS") == "" {
 		t.Skip("set GOPRINT_MDNS=1 to use multicast DNS on the network")
 	}
-	name := "goprint test " + time.Now().Format("150405.000")
+	// No dots: DNS-SD instance names get hyphens for them.
+	name := "goprint test " + time.Now().Format("150405000")
 	vp := New("v", Office(name))
 	srv, err := vp.Listen(":0")
 	if err != nil {
