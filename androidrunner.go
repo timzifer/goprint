@@ -21,9 +21,3 @@ func SetAndroidRunner(run AndroidRunner) {
 	androidRunner.run = run
 	androidRunner.Unlock()
 }
-
-func currentAndroidRunner() AndroidRunner {
-	androidRunner.Lock()
-	defer androidRunner.Unlock()
-	return androidRunner.run
-}

@@ -86,6 +86,12 @@ func goprintAndroidDone(id, adapter C.uintptr_t, info *C.int, n C.int, msg *C.ch
 	ch <- d
 }
 
+func currentAndroidRunner() AndroidRunner {
+	androidRunner.Lock()
+	defer androidRunner.Unlock()
+	return androidRunner.run
+}
+
 // withJava runs f through the installed AndroidRunner.
 func withJava(f func(vm, env, activity uintptr) error) error {
 	run := currentAndroidRunner()
