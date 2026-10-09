@@ -1,4 +1,4 @@
-//go:build linux || freebsd || openbsd || netbsd || dragonfly
+//go:build (linux && !android) || freebsd || openbsd || netbsd || dragonfly
 
 // Package portal talks to the print portal of xdg-desktop-portal
 // (org.freedesktop.portal.Print) over D-Bus. The portal shows the print
