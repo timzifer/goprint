@@ -109,9 +109,15 @@ jobs:
         run: go mod tidy -diff
       - name: go vet
         run: |
-          for goos in linux darwin windows freebsd android; do
-            echo "::group::GOOS=$goos"; GOOS=$goos go vet ./...; echo "::endgroup::"
+          # android/amd64 links only externally (cgo); android/arm64 does not.
+          for target in linux/amd64 darwin/amd64 windows/amd64 freebsd/amd64 android/arm64; do
+            echo "::group::$target"; GOOS=${target%/*} GOARCH=${target#*/} go vet ./...; echo "::endgroup::"
           done
+      # staticcheck 2026.2.1 cannot read Go 1.27.2's export data
+      # (dominikh/go-tools#1832); lint with 1.27.1 until a release fixes it.
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.27.1"
       - name: staticcheck
         uses: dominikh/staticcheck-action@v1
         with:
@@ -268,6 +274,12 @@ jobs:
         run: go test -count=1 -race ./...
       - name: Build example
         run: go build -o example-bin ./example
+      # staticcheck 2026.2.1 cannot read Go 1.27.2's export data
+      # (dominikh/go-tools#1832); lint with 1.27.1 until a release fixes it.
+      - uses: actions/setup-go@v7
+        if: runner.os == 'Linux'
+        with:
+          go-version: "1.27.1"
       - name: staticcheck
         if: runner.os == 'Linux'
         uses: dominikh/staticcheck-action@v1
