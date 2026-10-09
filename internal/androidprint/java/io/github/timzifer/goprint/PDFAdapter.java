@@ -42,32 +42,47 @@ public final class PDFAdapter extends PrintDocumentAdapter {
 
     // start shows the print dialog. color, duplex: PrintAttributes
     // constants or 0; orientation: 0 default, 1 landscape, 2 portrait.
-    public static void start(final Context ctx, byte[] pdf, String name,
-            final int color, final int duplex, final int orientation, long id) {
-        final PDFAdapter a = new PDFAdapter(pdf, name, id);
-        new Handler(Looper.getMainLooper()).post(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    PrintManager pm = (PrintManager) ctx.getSystemService(Context.PRINT_SERVICE);
-                    PrintAttributes.Builder b = new PrintAttributes.Builder();
-                    if (color != 0) {
-                        b.setColorMode(color);
-                    }
-                    if (duplex != 0) {
-                        b.setDuplexMode(duplex);
-                    }
-                    if (orientation == 1) {
-                        b.setMediaSize(PrintAttributes.MediaSize.UNKNOWN_LANDSCAPE);
-                    } else if (orientation == 2) {
-                        b.setMediaSize(PrintAttributes.MediaSize.UNKNOWN_PORTRAIT);
-                    }
-                    a.job = pm.print(a.name, a, b.build());
-                } catch (RuntimeException e) {
-                    a.report(String.valueOf(e));
+    public static void start(Context ctx, byte[] pdf, String name,
+            int color, int duplex, int orientation, long id) {
+        PDFAdapter a = new PDFAdapter(pdf, name, id);
+        new Handler(Looper.getMainLooper()).post(new Start(ctx, a, color, duplex, orientation));
+    }
+
+    // Start opens the dialog on the main thread.
+    private static final class Start implements Runnable {
+        private final Context ctx;
+        private final PDFAdapter a;
+        private final int color, duplex, orientation;
+
+        Start(Context ctx, PDFAdapter a, int color, int duplex, int orientation) {
+            this.ctx = ctx;
+            this.a = a;
+            this.color = color;
+            this.duplex = duplex;
+            this.orientation = orientation;
+        }
+
+        @Override
+        public void run() {
+            try {
+                PrintManager pm = (PrintManager) ctx.getSystemService(Context.PRINT_SERVICE);
+                PrintAttributes.Builder b = new PrintAttributes.Builder();
+                if (color != 0) {
+                    b.setColorMode(color);
                 }
+                if (duplex != 0) {
+                    b.setDuplexMode(duplex);
+                }
+                if (orientation == 1) {
+                    b.setMediaSize(PrintAttributes.MediaSize.UNKNOWN_LANDSCAPE);
+                } else if (orientation == 2) {
+                    b.setMediaSize(PrintAttributes.MediaSize.UNKNOWN_PORTRAIT);
+                }
+                a.job = pm.print(a.name, a, b.build());
+            } catch (RuntimeException e) {
+                a.report(String.valueOf(e));
             }
-        });
+        }
     }
 
     @Override
@@ -166,49 +181,69 @@ public final class PDFAdapter extends PrintDocumentAdapter {
 
     // state returns the job state; it may be called on any thread.
     public int state() {
-        final int[] r = new int[1];
-        onMain(new Runnable() {
-            @Override
-            public void run() {
-                r[0] = stateNow();
-            }
-        });
-        return r[0];
+        Call c = new Call(this, Call.STATE);
+        onMain(c);
+        return c.state;
     }
 
     // cancel cancels the job; it may be called on any thread.
     public void cancel() {
-        onMain(new Runnable() {
-            @Override
-            public void run() {
-                if (job != null) {
-                    job.cancel();
-                }
+        onMain(new Call(this, Call.CANCEL));
+    }
+
+    // Call is state or cancel, run on the main thread.
+    private static final class Call implements Runnable {
+        static final int STATE = 0, CANCEL = 1;
+        private final PDFAdapter a;
+        private final int op;
+        int state;
+
+        Call(PDFAdapter a, int op) {
+            this.a = a;
+            this.op = op;
+        }
+
+        @Override
+        public void run() {
+            if (op == STATE) {
+                state = a.stateNow();
+            } else if (a.job != null) {
+                a.job.cancel();
             }
-        });
+        }
     }
 
     // onMain runs r on the main thread and waits for it.
-    private static void onMain(final Runnable r) {
+    private static void onMain(Runnable r) {
         if (Looper.myLooper() == Looper.getMainLooper()) {
             r.run();
             return;
         }
-        final CountDownLatch latch = new CountDownLatch(1);
-        new Handler(Looper.getMainLooper()).post(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    r.run();
-                } finally {
-                    latch.countDown();
-                }
-            }
-        });
+        Latched l = new Latched(r);
+        new Handler(Looper.getMainLooper()).post(l);
         try {
-            latch.await();
+            l.latch.await();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+        }
+    }
+
+    // Latched runs r and counts down its latch.
+    private static final class Latched implements Runnable {
+        final CountDownLatch latch = new CountDownLatch(1);
+        private final Runnable r;
+
+        Latched(Runnable r) {
+            this.r = r;
+        }
+
+        @Override
+        public void run() {
+            try {
+                r.run();
+            } finally {
+                latch.countDown();
+            }
         }
     }
 }
