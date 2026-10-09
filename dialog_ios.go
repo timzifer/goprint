@@ -4,7 +4,7 @@ package goprint
 
 /*
 #cgo CFLAGS: -fobjc-arc
-#cgo LDFLAGS: -framework UIKit -framework Foundation
+#cgo LDFLAGS: -framework UIKit -framework Foundation -framework CoreGraphics
 #include <stdlib.h>
 #include "dialog_ios.h"
 */
