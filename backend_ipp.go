@@ -441,9 +441,15 @@ func (j *ippJob) state(ctx context.Context) (JobState, error) {
 }
 
 func (j *ippJob) wait(ctx context.Context) error {
+	return pollJob(ctx, j.state, fmt.Sprintf("job %d on %s", j.jobID, j.printer))
+}
+
+// pollJob polls state until the job is done or ctx ends; what names the
+// job in the error for an aborted job.
+func pollJob(ctx context.Context, state func(context.Context) (JobState, error), what string) error {
 	delay := 100 * time.Millisecond
 	for {
-		st, err := j.state(ctx)
+		st, err := state(ctx)
 		if err != nil {
 			return err
 		}
@@ -453,7 +459,7 @@ func (j *ippJob) wait(ctx context.Context) error {
 		case JobCanceled:
 			return ErrCanceled
 		case JobAborted:
-			return fmt.Errorf("goprint: job %d on %s aborted", j.jobID, j.printer)
+			return fmt.Errorf("goprint: %s aborted", what)
 		}
 		select {
 		case <-ctx.Done():
