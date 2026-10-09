@@ -46,8 +46,9 @@
 //
 // The package-level functions print through [Default], a [Client] with
 // only the [System] provider. A Client can combine further providers,
-// such as simulated printers; [Printer.Provider] tells where a printer
-// comes from and [Settings.Provider] selects the provider that prints.
+// such as the simulated printers of package virtualprinter;
+// [Printer.Provider] tells where a printer comes from and
+// [Settings.Provider] selects the provider that prints.
 // A [Provider] returns its jobs through [NewJob]; [DialogProvider] and
 // [PropertiesProvider] add a dialog and a driver dialog.
 //
