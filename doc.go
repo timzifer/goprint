@@ -54,6 +54,10 @@
 // for those that accept no PDF. A [Provider] returns its jobs through [NewJob]; [DialogProvider] and
 // [PropertiesProvider] add a dialog and a driver dialog.
 //
+// [Document.Attributes] carry values for whoever receives a job (e.g. a
+// virtual printer filing documents); they reach providers in the same
+// process and IPP printers that take the [IPPAttributes] job attribute.
+//
 // # Errors
 //
 // Errors wrap the sentinel errors ([ErrCanceled], [ErrPrinterNotFound],

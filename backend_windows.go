@@ -94,6 +94,9 @@ func (windowsBackend) print(ctx context.Context, src io.Reader, doc Document, s 
 	js, warnings := toJobSettings(s)
 	dm, dmWarnings := baseDevMode(s)
 	warnings = append(warnings, dmWarnings...)
+	if len(doc.Attributes) > 0 {
+		warnings = append(warnings, attributesWarning("the Windows spooler does not pass them on"))
+	}
 	if s.Strict && len(warnings) > 0 {
 		return nil, fmt.Errorf("%w: %s", ErrUnsupported, warnings[0])
 	}

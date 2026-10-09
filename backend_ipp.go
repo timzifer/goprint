@@ -222,6 +222,13 @@ func (b ippBackend) printFormat(ctx context.Context, src io.Reader, doc Document
 	}
 	attrs, w := ippJobAttributes(s)
 	warnings = append(warnings, w...)
+	if len(doc.Attributes) > 0 {
+		if takesAttributes(submitCtx, c, name) {
+			attrs.Add(IPPAttributes, ippAttributeValues(doc.Attributes)...)
+		} else {
+			warnings = append(warnings, attributesWarning("the printer does not take them"))
+		}
+	}
 	opts := &ipp.PrintJobOptions{JobName: doc.Title, Job: attrs, DocumentFormat: format}
 	if s.Strict {
 		// Ask the printer to reject jobs it cannot print as requested.
@@ -243,6 +250,17 @@ func (b ippBackend) printFormat(ctx context.Context, src io.Reader, doc Document
 		return nil, fmt.Errorf("%w: %s", ErrUnsupported, warnings[len(warnings)-1])
 	}
 	return &Job{b: job, warnings: warnings}, nil
+}
+
+// takesAttributes reports whether the printer lists IPPAttributes in
+// job-creation-attributes-supported.
+func takesAttributes(ctx context.Context, c *ipp.Client, printer string) bool {
+	p, err := c.GetPrinterAttributes(ctx, printer, "job-creation-attributes-supported")
+	if err != nil {
+		return false
+	}
+	a, ok := p.Attrs.Get("job-creation-attributes-supported")
+	return ok && slices.Contains(a.Strings(), IPPAttributes)
 }
 
 func (ippBackend) dialog(context.Context, Document, DialogOptions) (*Job, Settings, error) {

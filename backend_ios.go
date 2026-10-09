@@ -39,6 +39,9 @@ func (iosBackend) print(ctx context.Context, src io.Reader, doc Document, s Sett
 		return nil, fmt.Errorf("goprint: reading document: %w", err)
 	}
 	info, warnings := toIOSPrintInfo(s, docTitle(doc))
+	if len(doc.Attributes) > 0 {
+		warnings = append(warnings, attributesWarning("iOS does not pass them on"))
+	}
 	if s.Strict && len(warnings) > 0 {
 		return nil, fmt.Errorf("%w: %s", ErrUnsupported, warnings[0])
 	}

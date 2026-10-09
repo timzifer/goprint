@@ -131,6 +131,8 @@ func settingsFromIPP(attrs ipp.Attributes) (goprint.Settings, ipp.Attributes) {
 			if slices.ContainsFunc(a.Values, func(v ipp.Value) bool { n, ok := v.(ipp.Enum); return !ok || n != 3 }) {
 				bad(a)
 			}
+		case goprint.IPPAttributes:
+			// Document attributes, read by attributesFromIPP.
 		case "number-up":
 			if n, ok := a.Int(); !ok || n != 1 {
 				bad(a)
@@ -146,6 +148,22 @@ func settingsFromIPP(attrs ipp.Attributes) (goprint.Settings, ipp.Attributes) {
 		}
 	}
 	return s, unsupported
+}
+
+// attributesFromIPP reads Document.Attributes from the IPPAttributes job
+// attribute ("key=value" texts).
+func attributesFromIPP(attrs ipp.Attributes) map[string]string {
+	a, ok := attrs.Get(goprint.IPPAttributes)
+	if !ok {
+		return nil
+	}
+	out := map[string]string{}
+	for _, kv := range a.Strings() {
+		if k, v, ok := strings.Cut(kv, "="); ok && k != "" {
+			out[k] = v
+		}
+	}
+	return out
 }
 
 // ignoredAttribute reports job attributes that describe the job or
@@ -254,6 +272,9 @@ func printerAttributes(pr Printer, offline bool, host string) ipp.Attributes {
 	add("orientation-requested-supported", ipp.Enum(3), ipp.Enum(4), ipp.Enum(5), ipp.Enum(6))
 	add("print-scaling-supported", keywords("auto", "fit", "fill", "none")...)
 	add("print-scaling-default", ipp.Keyword("auto"))
+	add("job-creation-attributes-supported", keywords("copies", "multiple-document-handling", "page-ranges", "media", "media-col",
+		"media-source", "orientation-requested", "sides", "print-color-mode", "print-quality", "print-scaling",
+		goprint.IPPAttributes)...)
 
 	var media []ipp.Value
 	for _, m := range c.Media {

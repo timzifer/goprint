@@ -72,7 +72,15 @@ func (p systemProvider) Print(ctx context.Context, doc Document, s Settings) (*J
 }
 
 func (p systemProvider) Dialog(ctx context.Context, doc Document, opts DialogOptions) (*Job, Settings, error) {
-	return p.b.dialog(ctx, doc, opts)
+	// No native dialog passes attributes on.
+	if len(doc.Attributes) > 0 && opts.Settings.Strict {
+		return nil, Settings{}, fmt.Errorf("%w: %s", ErrUnsupported, attributesWarning("print dialogs do not pass them on"))
+	}
+	job, s, err := p.b.dialog(ctx, doc, opts)
+	if job != nil && len(doc.Attributes) > 0 {
+		job.warnings = append(job.warnings, attributesWarning("print dialogs do not pass them on"))
+	}
+	return job, s, err
 }
 
 func (p systemProvider) Properties(ctx context.Context, s Settings, owner uintptr) (Settings, error) {
