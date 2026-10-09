@@ -163,6 +163,11 @@ goprint.Default = goprint.NewClient(goprint.System(), vp)
 pdf := vp.Jobs()[0].PDF
 ```
 
+`vp.Listen(":8631")` serves the same printers over IPP (PDF only), so other
+processes and devices can print to them: goprint by printer URI
+(`srv.PrinterURI("Office")`), or CUPS with
+`lpadmin -p virtual -E -v ipp://host:8631/printers/Office -m everywhere`.
+
 ### macOS: main thread
 
 AppKit runs only on the main thread. Lock the main goroutine to it in an

@@ -11,6 +11,10 @@
 // warnings, or errors under Settings.Strict, as with real printers.
 // Failures are scripted: [Provider.FailNext], [Provider.SetOffline],
 // [Provider.HoldJobs] and [Printer.Latency].
+//
+// [Provider.Listen] (or [Provider.Handler]) serves the printers over IPP,
+// so that other processes and devices print to them too: goprint by
+// printer URI, CUPS, or any IPP client.
 package virtualprinter
 
 import (
@@ -170,6 +174,26 @@ func (p *Provider) Capabilities(_ context.Context, printer string) (goprint.Capa
 
 // Print implements [goprint.Provider]. It keeps doc as PDF in a new [Job].
 func (p *Provider) Print(ctx context.Context, doc goprint.Document, s goprint.Settings) (*goprint.Job, error) {
+	j, err := p.print(ctx, doc, s, 0)
+	if err != nil {
+		return nil, err
+	}
+	return goprint.NewJob(handle{j}, j.Warnings), nil
+}
+
+// reserveID returns a job id for a job that is printed later (IPP
+// Create-Job, then Send-Document).
+func (p *Provider) reserveID() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	id := p.nextID
+	p.nextID++
+	return id
+}
+
+// print prints doc as Print does and returns the job; id is a reserved
+// job id, or 0 for a new one.
+func (p *Provider) print(ctx context.Context, doc goprint.Document, s goprint.Settings, id int) (*Job, error) {
 	p.mu.Lock()
 	pr, err := p.lookup(s.Printer)
 	if err == nil && len(p.failNext) > 0 {
@@ -203,8 +227,12 @@ func (p *Provider) Print(ctx context.Context, doc goprint.Document, s goprint.Se
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if id == 0 {
+		id = p.nextID
+		p.nextID++
+	}
 	j := &Job{
-		ID:       p.nextID,
+		ID:       id,
 		Printer:  pr.Name,
 		Title:    doc.Title,
 		Settings: s,
@@ -218,9 +246,31 @@ func (p *Provider) Print(ctx context.Context, doc goprint.Document, s goprint.Se
 	} else {
 		close(j.done)
 	}
-	p.nextID++
 	p.jobs = append(p.jobs, j)
-	return goprint.NewJob(handle{j}, warnings), nil
+	return j, nil
+}
+
+// job returns the job with the id, or nil.
+func (p *Provider) job(id int) *Job {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, j := range p.jobs {
+		if j.ID == id {
+			return j
+		}
+	}
+	return nil
+}
+
+// printer returns the named printer and whether it is offline.
+func (p *Provider) printer(name string) (pr Printer, offline, ok bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	i := p.index(name)
+	if i < 0 {
+		return Printer{}, false, false
+	}
+	return p.printers[i], p.offline[name], true
 }
 
 // index returns the position of the named printer, or -1.
