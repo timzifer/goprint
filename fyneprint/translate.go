@@ -52,6 +52,7 @@ var texts = map[string]string{
 	"fyneprint.noprinters":       "No printers",
 	"fyneprint.printer":          "Printer",
 	"fyneprint.printer.default":  "{{.Name}} (default)",
+	"fyneprint.printer.provider": "{{.Name}} ({{.Provider}})",
 	"fyneprint.properties":       "Properties…",
 	"fyneprint.copies":           "Copies",
 	"fyneprint.copies.invalid":   "Enter a number from 1 to 999",

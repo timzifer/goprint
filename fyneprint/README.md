@@ -32,7 +32,7 @@ btn := widget.NewButton("Print…", func() {
 ## Fyne's own print dialog
 
 `ShowPrintDialog` draws the dialog in Fyne instead of opening the platform's
-one, and prints through goprint's headless `Print`. It looks and behaves the
+one, and prints headless through a `goprint.Client`. It looks and behaves the
 same on every platform and can always preselect the printer, which the
 Windows 11 dialog cannot.
 
@@ -84,6 +84,10 @@ fyneprint.ShowPrintDialog(w, goprint.PDFFile("report.pdf"),
   // after the operator switched the language:
   fyneprint.RefreshTexts()
   ```
+- **Providers:** `PrintDialogOptions.Client` (default `goprint.Default`) lists
+  the printers and prints. With several providers, e.g. simulated printers of
+  `goprint/virtualprinter`, the list shows all of them, labeled with their
+  provider, and `Settings.Provider` with `Settings.Printer` preselects one.
 - **Driver options:** for printers with a driver dialog (Windows) a
   "Properties…" button opens it (`goprint.PrinterProperties`). The choices
   there, finishing and other vendor features included, are shown in the

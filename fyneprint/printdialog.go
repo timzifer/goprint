@@ -37,6 +37,11 @@ type PrintDialogOptions struct {
 	// that the driver's settings (Vendor[goprint.VendorDevMode]) are
 	// dropped when the user picks another printer.
 	Settings goprint.Settings
+	// Client lists the printers and prints. Nil means goprint.Default.
+	// Printers of providers other than goprint.System are labeled with
+	// their provider's name; Settings.Provider selects the preset printer
+	// together with Settings.Printer.
+	Client *goprint.Client
 	// Translate, if set, supplies the dialog's texts, before the app-wide
 	// [SetTranslator] and Fyne's lang package; see [Translator].
 	Translate Translator
@@ -81,22 +86,15 @@ func init() {
 	}
 }
 
-// Replaced in tests, so that they never reach a real printer.
-var (
-	printersFunc = goprint.Printers
-	capsFunc     = goprint.GetCapabilities
-	printFunc    = goprint.Print
-	// propertiesFunc shows the driver's dialog.
-	propertiesFunc = goprint.PrinterProperties
-	// runAsync runs blocking work off the UI goroutine.
-	runAsync = func(f func()) { go f() }
-)
+// runAsync runs blocking work off the UI goroutine; tests make it
+// synchronous.
+var runAsync = func(f func()) { go f() }
 
 // ShowPrintDialog shows a print dialog drawn by Fyne itself, with a
 // preview of the sheets as they will come out of the printer. Unlike
 // [ShowDialog] it does not use the platform's dialog, so it works the same
 // everywhere and can always preselect the printer. On confirmation it
-// prints through goprint's headless [goprint.Print] (if opts.PrintNow) and
+// prints headless through opts.Client (if opts.PrintNow) and
 // calls done on the UI goroutine with the job and the chosen settings.
 //
 // The save button writes the selected pages as PDF and reports
@@ -266,11 +264,24 @@ func (d *printDialog) build() {
 	}
 }
 
+// client returns the client that lists the printers and prints.
+func (d *printDialog) client() *goprint.Client {
+	if d.opts.Client != nil {
+		return d.opts.Client
+	}
+	return goprint.Default
+}
+
+// is reports whether p is the printer name of provider.
+func is(p goprint.Printer, provider, name string) bool {
+	return p.Provider == provider && p.Name == name
+}
+
 // load reads the document and the printer list in the background.
 func (d *printDialog) load() {
 	runAsync(func() {
 		data, src, sizes, docErr := openDocument(d.doc)
-		printers, prErr := printersFunc(context.Background())
+		printers, prErr := d.client().Printers(context.Background())
 		fyne.Do(func() {
 			if docErr != nil {
 				d.finish(nil, goprint.Settings{}, docErr)
@@ -311,17 +322,23 @@ func openDocument(doc goprint.Document) ([]byte, *pdf.Source, []pageSize, error)
 // setPrinters fills the printer list and selects the preset printer, the
 // default printer or the first one.
 func (d *printDialog) setPrinters(all []goprint.Printer, err error) error {
-	want := d.s.Printer
+	wantProvider, want := d.s.Provider, d.s.Printer
 	refused := false
 	for _, p := range all {
 		switch {
 		case p.ToFile && d.opts.NoFileOutput:
-			refused = refused || p.Name == want
-		case !p.ToFile || d.opts.ShowFilePrinters || p.Name == want:
+			refused = refused || is(p, wantProvider, want)
+		case !p.ToFile || d.opts.ShowFilePrinters || is(p, wantProvider, want):
 			d.printers = append(d.printers, p)
 		}
 	}
-	if want != "" && !slices.ContainsFunc(d.printers, func(p goprint.Printer) bool { return p.Name == want }) {
+	// Every provider may have a default; the first one is the dialog's.
+	if i := slices.IndexFunc(d.printers, func(p goprint.Printer) bool { return p.Default }); i >= 0 {
+		for j := i + 1; j < len(d.printers); j++ {
+			d.printers[j].Default = false
+		}
+	}
+	if want != "" && !slices.ContainsFunc(d.printers, func(p goprint.Printer) bool { return is(p, wantProvider, want) }) {
 		if d.opts.RequirePrinter {
 			switch {
 			case refused:
@@ -335,9 +352,9 @@ func (d *printDialog) setPrinters(all []goprint.Printer, err error) error {
 	}
 	if want == "" {
 		if i := slices.IndexFunc(d.printers, func(p goprint.Printer) bool { return p.Default }); i >= 0 {
-			want = d.printers[i].Name
+			wantProvider, want = d.printers[i].Provider, d.printers[i].Name
 		} else if len(d.printers) > 0 {
-			want = d.printers[0].Name
+			wantProvider, want = d.printers[0].Provider, d.printers[0].Name
 		}
 	}
 	names := make([]string, len(d.printers))
@@ -355,15 +372,19 @@ func (d *printDialog) setPrinters(all []goprint.Printer, err error) error {
 	}
 	d.printersLoaded = true
 	d.printer.PlaceHolder = ""
-	d.printer.SetSelectedIndex(slices.IndexFunc(d.printers, func(p goprint.Printer) bool { return p.Name == want }))
+	d.printer.SetSelectedIndex(slices.IndexFunc(d.printers, func(p goprint.Printer) bool { return is(p, wantProvider, want) }))
 	return nil
 }
 
 func (d *printDialog) printerLabel(p goprint.Printer) string {
-	if p.Default {
-		return d.t("printer.default", map[string]any{"Name": p.Name})
+	name := p.Name
+	if p.Provider != "" {
+		name = d.t("printer.provider", map[string]any{"Name": p.Name, "Provider": p.Provider})
 	}
-	return p.Name
+	if p.Default {
+		return d.t("printer.default", map[string]any{"Name": name})
+	}
+	return name
 }
 
 // printerChanged loads the capabilities of the selected printer.
@@ -372,8 +393,8 @@ func (d *printDialog) printerChanged() {
 	if i < 0 || i >= len(d.printers) {
 		return
 	}
-	if name := d.printers[i].Name; name != d.s.Printer {
-		d.s.Printer = name
+	if p := d.printers[i]; !is(p, d.s.Provider, d.s.Printer) {
+		d.s.Provider, d.s.Printer = p.Provider, p.Name
 		// Driver settings belong to the printer they were made for.
 		if _, ok := d.s.Vendor[goprint.VendorDevMode]; ok {
 			d.s.Vendor = maps.Clone(d.s.Vendor)
@@ -387,9 +408,9 @@ func (d *printDialog) printerChanged() {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	d.capsCancel = cancel
-	name := d.s.Printer
+	provider, name := d.s.Provider, d.s.Printer
 	runAsync(func() {
-		caps, err := capsFunc(ctx, name)
+		caps, err := d.client().Capabilities(ctx, provider, name)
 		if ctx.Err() != nil {
 			return
 		}
@@ -522,10 +543,10 @@ func (d *printDialog) showProperties() {
 	d.ok.Disable()
 	owner := Owner(d.win)
 	runAsync(func() {
-		got, err := propertiesFunc(context.Background(), s, owner)
+		got, err := d.client().PrinterProperties(context.Background(), s, owner)
 		fyne.Do(func() {
 			d.props.Enable()
-			if d.finished || d.s.Printer != s.Printer {
+			if d.finished || d.s.Provider != s.Provider || d.s.Printer != s.Printer {
 				return
 			}
 			switch {
@@ -543,7 +564,7 @@ func (d *printDialog) showProperties() {
 // apply shows s, as read back from the driver's dialog, in the controls.
 // Page ranges and scaling stay: the driver does not know them.
 func (d *printDialog) apply(s goprint.Settings) {
-	s.Printer, s.PageRanges, s.Scaling = d.s.Printer, d.s.PageRanges, d.s.Scaling
+	s.Provider, s.Printer, s.PageRanges, s.Scaling = d.s.Provider, d.s.Printer, d.s.PageRanges, d.s.Scaling
 	d.s = s
 	d.copies.SetText(strconv.Itoa(max(s.Copies, 1)))
 	if s.Collate != nil {
@@ -745,7 +766,7 @@ func (d *printDialog) confirm() {
 	d.ok.Disable()
 	doc := d.doc
 	runAsync(func() {
-		job, err := printFunc(context.Background(), doc, s)
+		job, err := d.client().Print(context.Background(), doc, s)
 		fyne.Do(func() { d.finish(job, s, err) })
 	})
 }
