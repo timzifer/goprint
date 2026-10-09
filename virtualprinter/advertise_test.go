@@ -67,7 +67,12 @@ func TestAdvertiseFindAndPrint(t *testing.T) {
 	}
 	i := slices.IndexFunc(ps, func(p goprint.Printer) bool { return p.Name == name })
 	if i < 0 {
-		t.Fatalf("%q not found among %d printers", name, len(ps))
+		var found []string
+		for _, p := range ps {
+			found = append(found, fmt.Sprintf("%q (%s)", p.Name, p.Description))
+		}
+		services, _ := browseForTest()
+		t.Fatalf("%q not found among %v; DNS-SD: %v", name, found, services)
 	}
 	if p := ps[i]; p.Description != "Virtual office printer" || !p.Caps.Duplex || !slices.Contains(p.Caps.Formats, "application/pdf") {
 		t.Errorf("found %+v", p)
