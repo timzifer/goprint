@@ -4,7 +4,7 @@ go 1.26.4
 
 require (
 	github.com/timzifer/cera v0.6.1
-	github.com/timzifer/goprint v0.5.0
+	github.com/timzifer/goprint v0.6.0
 )
 
 require (
