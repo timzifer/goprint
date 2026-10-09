@@ -2,6 +2,8 @@ package virtualprinter
 
 import (
 	"math"
+	"slices"
+	"strings"
 
 	"github.com/timzifer/goprint"
 	"github.com/timzifer/goprint/ipp"
@@ -124,7 +126,19 @@ func settingsFromIPP(attrs ipp.Attributes) (goprint.Settings, ipp.Attributes) {
 			default:
 				bad(a)
 			}
+		case "finishings":
+			// 3 is none.
+			if slices.ContainsFunc(a.Values, func(v ipp.Value) bool { n, ok := v.(ipp.Enum); return !ok || n != 3 }) {
+				bad(a)
+			}
+		case "number-up":
+			if n, ok := a.Int(); !ok || n != 1 {
+				bad(a)
+			}
 		default:
+			if ignoredAttribute(a.Name) {
+				continue
+			}
 			if s.Vendor == nil {
 				s.Vendor = map[string]string{}
 			}
@@ -132,6 +146,20 @@ func settingsFromIPP(attrs ipp.Attributes) (goprint.Settings, ipp.Attributes) {
 		}
 	}
 	return s, unsupported
+}
+
+// ignoredAttribute reports job attributes that describe the job or
+// concern a print server, not the printer: clients such as CUPS send
+// them along. CUPS also forwards its PPD options (ColorModel, Duplex,
+// cupsPrintQuality, ...), which carry nothing the IPP attributes do not.
+func ignoredAttribute(name string) bool {
+	switch name {
+	case "job-priority", "job-sheets", "job-uuid", "job-hold-until", "job-cancel-after",
+		"job-originating-host-name", "job-originating-user-name", "job-name",
+		"job-account-id", "job-accounting-user-id", "document-name-supplied":
+		return true
+	}
+	return strings.HasPrefix(name, "cups") || (name != "" && name[0] >= 'A' && name[0] <= 'Z')
 }
 
 // mediaFromCol reads media-size-name, media-size and media-source of a

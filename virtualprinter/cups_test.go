@@ -39,7 +39,7 @@ func TestCUPSPrintsToServer(t *testing.T) {
 	}
 
 	vp := New("v", Office("Office"))
-	// Log the job attributes CUPS sends.
+	// Log the job attributes CUPS sends, for diagnosis.
 	h := vp.Handler()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		data, _ := io.ReadAll(r.Body)

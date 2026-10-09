@@ -245,3 +245,25 @@ func TestSettingsFromIPP(t *testing.T) {
 		t.Errorf("unsupported %v", bad)
 	}
 }
+
+func TestSettingsFromIPPIgnoresJobDescription(t *testing.T) {
+	s, bad := settingsFromIPP(ipp.Attributes{
+		{Name: "job-priority", Values: []ipp.Value{ipp.Integer(50)}},
+		{Name: "job-uuid", Values: []ipp.Value{ipp.URI("urn:uuid:1")}},
+		{Name: "ColorModel", Values: []ipp.Value{ipp.Keyword("RGB")}},
+		{Name: "cupsPrintQuality", Values: []ipp.Value{ipp.Keyword("Normal")}},
+		{Name: "finishings", Values: []ipp.Value{ipp.Enum(3)}},
+		{Name: "number-up", Values: []ipp.Value{ipp.Integer(1)}},
+		{Name: "dms-folder", Values: []ipp.Value{ipp.Keyword("invoices")}},
+	})
+	if len(bad) != 0 || len(s.Vendor) != 1 || s.Vendor["dms-folder"] != "invoices" {
+		t.Errorf("settings %+v, unsupported %v", s, bad)
+	}
+	_, bad = settingsFromIPP(ipp.Attributes{
+		{Name: "finishings", Values: []ipp.Value{ipp.Enum(4)}},
+		{Name: "number-up", Values: []ipp.Value{ipp.Integer(2)}},
+	})
+	if len(bad) != 2 {
+		t.Errorf("unsupported %v", bad)
+	}
+}
