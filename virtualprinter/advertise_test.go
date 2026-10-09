@@ -2,6 +2,7 @@ package virtualprinter
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"slices"
 	"strings"
@@ -49,7 +50,7 @@ func TestAdvertiseFindAndPrint(t *testing.T) {
 		t.Skip("set GOPRINT_MDNS=1 to use multicast DNS on the network")
 	}
 	// No dots: DNS-SD instance names get hyphens for them.
-	name := "goprint test " + time.Now().Format("150405000")
+	name := fmt.Sprintf("goprint test %d", time.Now().UnixNano()%1e9)
 	vp := New("v", Office(name))
 	srv, err := vp.Listen(":0")
 	if err != nil {
