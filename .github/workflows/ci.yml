@@ -204,7 +204,9 @@ jobs:
           GOPRINT_CUPS: "1"
           GOPRINT_CUPS_PDF: ${{ runner.os == 'Linux' && 'PDF' || '' }}
           GOPRINT_CUPS_PDF_OUT: /home/runner/PDF:/var/spool/cups-pdf/runner:/var/spool/cups-pdf/ANONYMOUS
-        run: go test -count=1 -v -run 'CUPS' .
+          GOPRINT_CUPS_VIRTUAL: ${{ runner.os == 'Linux' && '1' || '' }}
+          GOPRINT_LPADMIN: sudo -n lpadmin
+        run: go test -count=1 -v -run 'CUPS' . ./virtualprinter
       - name: CUPS logs
         if: failure() && runner.os == 'Linux'
         run: sudo tail -n 100 /var/log/cups/error_log /var/log/cups/cups-pdf_log 2>/dev/null || true
