@@ -112,6 +112,24 @@ user's choices; the driver's part travels as
 applies the other settings on top. The classic dialog returns it too. Apps can
 store it to reuse the choice later, but only for the same printer.
 
+### Providers
+
+The package-level functions print through `goprint.Default`, a `Client` with
+only the `System()` provider (CUPS, the Windows spooler, IPP URIs). A
+`Client` can combine further providers that implement `goprint.Provider`,
+such as simulated printers. `Printer.Provider` tells where a printer comes
+from; `Settings.Provider` selects the provider that prints (empty: the system).
+
+```go
+c := goprint.NewClient(goprint.System(), myProvider) // myProvider.Name() == "virtual"
+printers, err := c.Printers(ctx) // all providers; partial results if some fail
+job, err := c.Print(ctx, doc, goprint.Settings{Provider: "virtual", Printer: "Label-62"})
+```
+
+Programs may also replace `goprint.Default` before they print. Providers
+create their jobs with `goprint.NewJob`; implementing `DialogProvider` or
+`PropertiesProvider` adds a dialog or a driver dialog.
+
 ### macOS: main thread
 
 AppKit runs only on the main thread. Lock the main goroutine to it in an

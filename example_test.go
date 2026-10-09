@@ -21,6 +21,27 @@ func ExamplePrinters() {
 	}
 }
 
+func ExampleNewClient() {
+	ctx := context.Background()
+	// A Client combines providers; System is the platform's print system.
+	// Further providers (e.g. simulated printers) are passed after it.
+	c := goprint.NewClient(goprint.System())
+	printers, err := c.Printers(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if len(printers) == 0 {
+		return
+	}
+	// Provider and Name together address a printer.
+	p := printers[0]
+	job, err := c.Print(ctx, goprint.PDFFile("label.pdf"), goprint.Settings{Provider: p.Provider, Printer: p.Name})
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(job.ID())
+}
+
 func ExamplePrint() {
 	ctx := context.Background()
 	job, err := goprint.Print(ctx, goprint.PDFFile("invoice.pdf"), goprint.Settings{
