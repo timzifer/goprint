@@ -42,6 +42,32 @@ type jobBackend interface {
 	cancel(ctx context.Context) error
 }
 
+// JobHandle is a print job of a [Provider], wrapped into a [Job] by
+// [NewJob].
+type JobHandle interface {
+	// ID returns the provider's job id.
+	ID() string
+	// State queries the current job state.
+	State(ctx context.Context) (JobState, error)
+	// Wait blocks until the job reaches a final state or ctx is done.
+	Wait(ctx context.Context) error
+	// Cancel cancels the job.
+	Cancel(ctx context.Context) error
+}
+
+// NewJob returns the Job for a provider's job h, with the settings that
+// could not be honored.
+func NewJob(h JobHandle, warnings []Warning) *Job {
+	return &Job{b: handleJob{h}, warnings: append([]Warning(nil), warnings...)}
+}
+
+type handleJob struct{ h JobHandle }
+
+func (j handleJob) id() string                                  { return j.h.ID() }
+func (j handleJob) state(ctx context.Context) (JobState, error) { return j.h.State(ctx) }
+func (j handleJob) wait(ctx context.Context) error              { return j.h.Wait(ctx) }
+func (j handleJob) cancel(ctx context.Context) error            { return j.h.Cancel(ctx) }
+
 // Job is a submitted print job.
 type Job struct {
 	b        jobBackend

@@ -24,6 +24,9 @@ type Document struct {
 
 // Printer describes a print queue.
 type Printer struct {
+	// Provider names the [Provider] the printer belongs to; "" is the
+	// [System] provider. Use it as [Settings.Provider].
+	Provider    string
 	Name        string
 	Description string
 	Location    string
@@ -62,31 +65,22 @@ type Resolution struct {
 	X, Y int
 }
 
-// Printers lists the available printers.
+// Printers lists the available printers of [Default]'s providers, as
+// [Client.Printers].
 func Printers(ctx context.Context) ([]Printer, error) {
-	return platform.printers(ctx)
+	return Default.Printers(ctx)
 }
 
-// GetCapabilities reports the capabilities of the named printer. An empty
-// name refers to the default printer.
+// GetCapabilities reports the capabilities of the named printer of the
+// [System] provider. An empty name refers to the default printer. Other
+// providers' printers are reached through [Client.Capabilities].
 func GetCapabilities(ctx context.Context, printer string) (Capabilities, error) {
-	return platform.capabilities(ctx, printer)
+	return Default.Capabilities(ctx, "", printer)
 }
 
-// Print prints doc with s, without any UI.
+// Print prints doc with s, without any UI, through [Default].
 func Print(ctx context.Context, doc Document, s Settings) (*Job, error) {
-	if err := doc.validate(); err != nil {
-		return nil, err
-	}
-	if err := s.validate(); err != nil {
-		return nil, err
-	}
-	src, err := doc.open()
-	if err != nil {
-		return nil, err
-	}
-	defer src.Close()
-	return platform.print(ctx, src, doc, s)
+	return Default.Print(ctx, doc, s)
 }
 
 // PrinterProperties shows the printer driver's own settings dialog
@@ -100,10 +94,7 @@ func Print(ctx context.Context, doc Document, s Settings) (*Job, error) {
 // cancels. Only Windows printers have such a dialog
 // ([Capabilities.DriverDialog]); elsewhere it returns [ErrUnsupported].
 func PrinterProperties(ctx context.Context, s Settings, owner uintptr) (Settings, error) {
-	if err := s.validate(); err != nil {
-		return Settings{}, err
-	}
-	return platform.properties(ctx, s, owner)
+	return Default.PrinterProperties(ctx, s, owner)
 }
 
 // DialogStyle selects the native dialog on platforms that offer several.
@@ -152,13 +143,7 @@ type DialogOptions struct {
 // It returns [ErrCanceled] if the user cancels and [ErrNoDialog] if the
 // platform has no dialog available.
 func Dialog(ctx context.Context, doc Document, opts DialogOptions) (*Job, Settings, error) {
-	if err := doc.validate(); err != nil {
-		return nil, Settings{}, err
-	}
-	if err := opts.Settings.validate(); err != nil {
-		return nil, Settings{}, err
-	}
-	return platform.dialog(ctx, doc, opts)
+	return Default.Dialog(ctx, doc, opts)
 }
 
 // fileOutputName reports printer names that stand for printers writing

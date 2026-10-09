@@ -42,6 +42,15 @@
 // for what Settings has no field for (finishing, stapling, secure print,
 // ...); the result travels to [Print] in Settings.Vendor[VendorDevMode].
 //
+// # Providers
+//
+// The package-level functions print through [Default], a [Client] with
+// only the [System] provider. A Client can combine further providers,
+// such as simulated printers; [Printer.Provider] tells where a printer
+// comes from and [Settings.Provider] selects the provider that prints.
+// A [Provider] returns its jobs through [NewJob]; [DialogProvider] and
+// [PropertiesProvider] add a dialog and a driver dialog.
+//
 // # Errors
 //
 // Errors wrap the sentinel errors ([ErrCanceled], [ErrPrinterNotFound],

@@ -2,7 +2,11 @@ package goprint
 
 // Settings are print settings. Zero values mean "printer default".
 type Settings struct {
-	// Printer is the queue or printer name; empty means the default printer.
+	// Provider selects the [Provider] that prints, by name; empty means the
+	// [System] provider.
+	Provider string
+	// Printer is the queue or printer name; empty means the provider's
+	// default printer.
 	Printer string
 	// Copies is the number of copies; 0 means 1.
 	Copies int
