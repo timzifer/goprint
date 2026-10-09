@@ -208,14 +208,21 @@ func (b ippBackend) resolve(ctx context.Context, printer string, creds *Credenti
 }
 
 func (b ippBackend) print(ctx context.Context, src io.Reader, doc Document, s Settings) (*Job, error) {
+	return b.printFormat(ctx, src, doc, s, "", nil)
+}
+
+// printFormat is print with the document-format (empty: PDF) and the
+// warnings found before.
+func (b ippBackend) printFormat(ctx context.Context, src io.Reader, doc Document, s Settings, format string, warnings []Warning) (*Job, error) {
 	submitCtx, cancel := withDefaultTimeout(ctx)
 	defer cancel()
 	c, name, err := b.resolve(submitCtx, s.Printer, s.Credentials)
 	if err != nil {
 		return nil, err
 	}
-	attrs, warnings := ippJobAttributes(s)
-	opts := &ipp.PrintJobOptions{JobName: doc.Title, Job: attrs}
+	attrs, w := ippJobAttributes(s)
+	warnings = append(warnings, w...)
+	opts := &ipp.PrintJobOptions{JobName: doc.Title, Job: attrs, DocumentFormat: format}
 	if s.Strict {
 		// Ask the printer to reject jobs it cannot print as requested.
 		opts.Operation = ipp.Attributes{{Name: "ipp-attribute-fidelity", Values: []ipp.Value{ipp.Boolean(true)}}}
