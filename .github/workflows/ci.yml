@@ -326,9 +326,33 @@ jobs:
           install-go: false
           working-directory: raster
 
+  android-dex:
+    # The Java part of the Android backend is committed as classes.dex;
+    # rebuild it with the pinned tools and check that it matches.
+    name: android dex
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Install SDK packages
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-34" "build-tools;34.0.0" > /dev/null
+      - name: Build classes.dex
+        run: internal/androidprint/gen.sh
+      - uses: actions/upload-artifact@v6
+        with:
+          name: classes.dex
+          path: internal/androidprint/classes.dex
+      - name: Matches the committed file
+        run: |
+          git ls-files --error-unmatch internal/androidprint/classes.dex
+          git diff --exit-code internal/androidprint/classes.dex
+
   ci-ok:
     if: always()
-    needs: [test, coverage, lint, cross-compile, cross-compile-ios, integration-cups, integration-portal, macos-dialog, fyneprint, raster]
+    needs: [test, coverage, lint, cross-compile, cross-compile-ios, integration-cups, integration-portal, macos-dialog, fyneprint, raster, android-dex]
     runs-on: ubuntu-latest
     steps:
       - name: All jobs succeeded
