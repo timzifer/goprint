@@ -133,14 +133,22 @@ create their jobs with `goprint.NewJob`; implementing `DialogProvider` or
 `goprint.IPPEverywhere(goprint.IPPEverywhereOptions{})` finds the IPP printers
 on the local network through DNS-SD (multicast DNS) and prints to them
 directly: no driver and no print server, on every platform, also on Linux
-without CUPS. Printers are named by their DNS-SD instance name. For now it
-prints only to printers that accept PDF; printers that only take raster
-formats (PWG raster, Apple's URF) return `ErrUnsupported`.
+without CUPS. Printers are named by their DNS-SD instance name. PDF goes to
+printers that accept it as it is. Many printers only take raster formats (PWG
+Raster, Apple Raster/URF); for them the separate module `goprint/raster`
+renders the PDF with [cera](https://github.com/timzifer/cera), choosing format,
+resolution and color space from the printer's attributes. Without it, such
+printers return `ErrUnsupported`.
 
 ```go
-goprint.Default = goprint.NewClient(goprint.System(), goprint.IPPEverywhere(goprint.IPPEverywhereOptions{}))
+ipp := goprint.IPPEverywhere(goprint.IPPEverywhereOptions{Rasterizer: raster.New()})
+goprint.Default = goprint.NewClient(goprint.System(), ipp)
 // Printers lists them with Provider "ipp"
 ```
+
+Two-sided raster jobs need printers that take back sides as they come
+(`pwg-raster-document-sheet-back` "normal", URF "DM1"); others print
+one-sided with a warning for now.
 
 `goprint/virtualprinter` simulates printers without hardware, for tests,
 demos and development: jobs are kept in memory as PDF, settings a printer
@@ -197,6 +205,7 @@ returned `Job` cannot be tracked and reports completed.
 | `goprint`         | Public API, types, errors                               |
 | `goprint/ipp`     | IPP codec and client (RFC 8010/8011), usable standalone |
 | `goprint/ipp/ipptest` | IPP mock server for tests                           |
+| `goprint/raster` | PDF → PWG Raster / Apple Raster for `IPPEverywhere` (separate module, uses cera) |
 | `goprint/virtualprinter` | Simulated printers as a `Provider`: jobs kept in memory as PDF, scripted failures |
 | `goprint/fyneprint` | [Fyne](https://fyne.io) integration (separate module) |
 

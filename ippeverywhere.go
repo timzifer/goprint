@@ -3,6 +3,7 @@ package goprint
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/netip"
 	"slices"
@@ -22,6 +23,11 @@ type IPPEverywhereOptions struct {
 	// BrowseTimeout bounds the network search of Printers; 0 means two
 	// seconds. A shorter deadline of the caller's context wins.
 	BrowseTimeout time.Duration
+	// Rasterizer renders PDF for printers that accept no PDF but PWG
+	// Raster or Apple Raster, as many network printers do. Nil leaves
+	// them out: Print returns ErrUnsupported. The module
+	// github.com/timzifer/goprint/raster provides one.
+	Rasterizer Rasterizer
 }
 
 // IPPEverywhere returns a provider for the IPP printers on the local
@@ -30,9 +36,9 @@ type IPPEverywhereOptions struct {
 // platform, also on Linux without CUPS.
 //
 // Printers are named by their DNS-SD instance name; there is no default
-// printer. Print also takes a printer URI ("ipp://…") as name. Only
-// printers that accept PDF can print for now; others return
-// [ErrUnsupported].
+// printer. Print also takes a printer URI ("ipp://…") as name. PDF is
+// sent as it is to printers that accept it; for the others it is
+// rendered by [IPPEverywhereOptions.Rasterizer].
 func IPPEverywhere(opts IPPEverywhereOptions) Provider {
 	if opts.Name == "" {
 		opts.Name = "ipp"
@@ -173,18 +179,53 @@ func (p *ippEverywhere) Print(ctx context.Context, doc Document, s Settings) (*J
 	if err != nil {
 		return nil, err
 	}
-	caps, err := networkIPP.capabilities(ctx, uri)
+	attrs, err := printerAttributes(ctx, uri, s.Credentials, slices.Concat(printerAttrs, rasterAttrs))
 	if err != nil {
 		return nil, err
-	}
-	if len(caps.Formats) > 0 && !slices.Contains(caps.Formats, ipp.DefaultDocumentFormat) {
-		return nil, fmt.Errorf("%w: printer %q accepts no PDF (%s)", ErrUnsupported, s.Printer, strings.Join(caps.Formats, ", "))
 	}
 	src, err := doc.open()
 	if err != nil {
 		return nil, err
 	}
 	defer src.Close()
+	name := s.Printer
 	s.Printer = uri
-	return networkIPP.print(ctx, src, doc, s)
+	formats := capsFromIPP(attrs).Formats
+	if len(formats) == 0 || slices.Contains(formats, ipp.DefaultDocumentFormat) {
+		return networkIPP.print(ctx, src, doc, s)
+	}
+	if p.opts.Rasterizer == nil {
+		return nil, fmt.Errorf("%w: printer %q accepts no PDF (%s); a Rasterizer (module github.com/timzifer/goprint/raster) renders for it",
+			ErrUnsupported, name, strings.Join(formats, ", "))
+	}
+	f, warnings, err := chooseRaster(attrs, s)
+	if err != nil {
+		return nil, fmt.Errorf("printer %q: %w", name, err)
+	}
+	if s.Strict && len(warnings) > 0 {
+		return nil, fmt.Errorf("%w: %s", ErrUnsupported, warnings[0])
+	}
+	data, err := io.ReadAll(src)
+	if err != nil {
+		return nil, err
+	}
+	pr, pw := io.Pipe()
+	defer pr.Close() // ends the rasterizer if the job is not sent
+	go func() { pw.CloseWithError(p.opts.Rasterizer.Rasterize(ctx, pw, data, f)) }()
+	return networkIPP.printFormat(ctx, pr, doc, rasterSettings(s, f), f.Type, warnings)
+}
+
+// printerAttributes asks the printer at uri for its attributes.
+func printerAttributes(ctx context.Context, uri string, creds *Credentials, names []string) (ipp.Attributes, error) {
+	ctx, cancel := withDefaultTimeout(ctx)
+	defer cancel()
+	c, err := networkIPP.client(uri, creds)
+	if err != nil {
+		return nil, err
+	}
+	p, err := c.GetPrinterAttributes(ctx, uri, names...)
+	if err != nil {
+		return nil, ippError(err, uri)
+	}
+	return p.Attrs, nil
 }

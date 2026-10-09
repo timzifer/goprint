@@ -289,9 +289,46 @@ jobs:
           install-go: false
           working-directory: fyneprint
 
+  raster:
+    # Separate module (own go.mod) so the core keeps no cera dependency.
+    name: raster (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: raster
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+          cache-dependency-path: raster/go.sum
+      - name: go mod tidy
+        run: go mod tidy -diff
+      - name: go vet
+        run: go vet ./...
+      - name: Test
+        run: go test -count=1 ./...
+      # staticcheck 2026.2.1 cannot read Go 1.27.2's export data
+      # (dominikh/go-tools#1832); lint with 1.27.1 until a release fixes it.
+      - uses: actions/setup-go@v7
+        if: runner.os == 'Linux'
+        with:
+          go-version: "1.27.1"
+          cache: false # the first setup-go already restored the module cache
+      - name: staticcheck
+        if: runner.os == 'Linux'
+        uses: dominikh/staticcheck-action@v1
+        with:
+          install-go: false
+          working-directory: raster
+
   ci-ok:
     if: always()
-    needs: [test, coverage, lint, cross-compile, cross-compile-ios, integration-cups, integration-portal, macos-dialog, fyneprint]
+    needs: [test, coverage, lint, cross-compile, cross-compile-ios, integration-cups, integration-portal, macos-dialog, fyneprint, raster]
     runs-on: ubuntu-latest
     steps:
       - name: All jobs succeeded
