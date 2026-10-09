@@ -326,6 +326,26 @@ jobs:
           install-go: false
           working-directory: raster
 
+  cross-compile-android-cgo:
+    # The Android backend uses JNI through cgo; the runners carry the NDK.
+    name: build android/arm64 (cgo)
+    runs-on: ubuntu-latest
+    env:
+      GOOS: android
+      GOARCH: arm64
+      CGO_ENABLED: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+      - name: Build
+        run: |
+          export CC="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
+          go vet ./...
+          go build ./...
+          go test -c -o /dev/null .
+
   android-dex:
     # The Java part of the Android backend is committed as classes.dex;
     # rebuild it with the pinned tools and check that it matches.
@@ -338,7 +358,7 @@ jobs:
           distribution: temurin
           java-version: "21"
       - name: Install SDK packages
-        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-34" "build-tools;34.0.0" > /dev/null
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-34" "build-tools;35.0.0" > /dev/null
       - name: Build classes.dex
         run: internal/androidprint/gen.sh
       - uses: actions/upload-artifact@v7
@@ -352,7 +372,7 @@ jobs:
 
   ci-ok:
     if: always()
-    needs: [test, coverage, lint, cross-compile, cross-compile-ios, integration-cups, integration-portal, macos-dialog, fyneprint, raster, android-dex]
+    needs: [test, coverage, lint, cross-compile, cross-compile-ios, cross-compile-android-cgo, integration-cups, integration-portal, macos-dialog, fyneprint, raster, android-dex]
     runs-on: ubuntu-latest
     steps:
       - name: All jobs succeeded
