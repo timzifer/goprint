@@ -206,7 +206,9 @@ jobs:
           GOPRINT_CUPS_PDF_OUT: /home/runner/PDF:/var/spool/cups-pdf/runner:/var/spool/cups-pdf/ANONYMOUS
           GOPRINT_CUPS_VIRTUAL: ${{ runner.os == 'Linux' && '1' || '' }}
           GOPRINT_LPADMIN: sudo -n lpadmin
-        run: go test -count=1 -v -run 'CUPS' . ./virtualprinter
+          # Multicast DNS next to the system's responder (Avahi, mDNSResponder).
+          GOPRINT_MDNS: "1"
+        run: go test -count=1 -v -run 'CUPS|Respond|Advertise' . ./virtualprinter ./internal/dnssd
       - name: CUPS logs
         if: failure() && runner.os == 'Linux'
         run: sudo tail -n 100 /var/log/cups/error_log /var/log/cups/cups-pdf_log 2>/dev/null || true

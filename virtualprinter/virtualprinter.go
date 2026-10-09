@@ -14,7 +14,8 @@
 //
 // [Provider.Listen] (or [Provider.Handler]) serves the printers over IPP,
 // so that other processes and devices print to them too: goprint by
-// printer URI, CUPS, or any IPP client.
+// printer URI, CUPS, or any IPP client. [Server.Advertise] announces them
+// on the local network with DNS-SD.
 package virtualprinter
 
 import (
