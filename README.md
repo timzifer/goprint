@@ -130,6 +130,18 @@ Programs may also replace `goprint.Default` before they print. Providers
 create their jobs with `goprint.NewJob`; implementing `DialogProvider` or
 `PropertiesProvider` adds a dialog or a driver dialog.
 
+`goprint.IPPEverywhere(goprint.IPPEverywhereOptions{})` finds the IPP printers
+on the local network through DNS-SD (multicast DNS) and prints to them
+directly: no driver and no print server, on every platform, also on Linux
+without CUPS. Printers are named by their DNS-SD instance name. For now it
+prints only to printers that accept PDF; printers that only take raster
+formats (PWG raster, Apple's URF) return `ErrUnsupported`.
+
+```go
+goprint.Default = goprint.NewClient(goprint.System(), goprint.IPPEverywhere(goprint.IPPEverywhereOptions{}))
+// Printers lists them with Provider "ipp"
+```
+
 `goprint/virtualprinter` simulates printers without hardware, for tests,
 demos and development: jobs are kept in memory as PDF, settings a printer
 cannot honor become warnings, and failures are scripted (offline printers,
@@ -175,7 +187,7 @@ returned `Job` cannot be tracked and reports completed.
 | Linux/BSD | IPP to CUPS (no libcups)         | xdg-desktop-portal (`org.freedesktop.portal.Print`) |
 | macOS     | IPP to CUPS                      | `NSPrintOperation` via purego             |
 | Windows   | PDF → Direct2D → XPS → spooler   | Modern (`PrintManager`, preview) or classic (`PrintDlgEx`) |
-| any       | IPP Everywhere printers (`goprint/ipp`) | –                                  |
+| any       | IPP Everywhere printers by URI, or found via DNS-SD (`IPPEverywhere`) | –          |
 | Android, iOS | not yet: every call returns `ErrUnsupported` | –                         |
 
 ## Packages

@@ -49,7 +49,8 @@
 // such as the simulated printers of package virtualprinter;
 // [Printer.Provider] tells where a printer comes from and
 // [Settings.Provider] selects the provider that prints.
-// A [Provider] returns its jobs through [NewJob]; [DialogProvider] and
+// [IPPEverywhere] is a provider for the IPP printers on the local network,
+// found through DNS-SD. A [Provider] returns its jobs through [NewJob]; [DialogProvider] and
 // [PropertiesProvider] add a dialog and a driver dialog.
 //
 // # Errors

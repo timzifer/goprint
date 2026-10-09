@@ -7,3 +7,5 @@ require (
 	github.com/godbus/dbus/v5 v5.2.2
 	golang.org/x/sys v0.48.0
 )
+
+require golang.org/x/net v0.60.0
