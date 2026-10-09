@@ -341,7 +341,7 @@ jobs:
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-34" "build-tools;34.0.0" > /dev/null
       - name: Build classes.dex
         run: internal/androidprint/gen.sh
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: classes.dex
           path: internal/androidprint/classes.dex
