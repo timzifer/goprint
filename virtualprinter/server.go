@@ -154,9 +154,15 @@ func (s *Server) instances(host string, port int) []dnssd.Instance {
 	return out
 }
 
-// hostLabel is the machine's host name as a DNS label.
+// hostLabel is the machine's host name as part of a DNS label: at most
+// 40 characters, so that "-goprint-<port>" fits the 63 of a label. Longer
+// names (CI machines have them) are cut and keep a hash of the rest.
 func hostLabel() string {
 	h, _ := os.Hostname()
+	return labelOf(h)
+}
+
+func labelOf(h string) string {
 	h, _, _ = strings.Cut(h, ".")
 	var b strings.Builder
 	for _, r := range strings.ToLower(h) {
@@ -164,10 +170,15 @@ func hostLabel() string {
 			b.WriteRune(r)
 		}
 	}
-	if b.Len() == 0 {
+	l := b.String()
+	if l == "" {
 		return "host"
 	}
-	return b.String()
+	if len(l) > 40 {
+		sum := sha1.Sum([]byte(l))
+		l = fmt.Sprintf("%s-%x", strings.TrimRight(l[:31], "-"), sum[:4])
+	}
+	return l
 }
 
 func printerPath(name string) string { return "/printers/" + url.PathEscape(name) }

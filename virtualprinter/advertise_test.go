@@ -84,3 +84,18 @@ func TestAdvertiseFindAndPrint(t *testing.T) {
 		t.Errorf("jobs %+v", jobs)
 	}
 }
+
+func TestLabelOf(t *testing.T) {
+	long := "sat12-bc178-c6df9a9d-0fbc-4ebc-a73b-5a3c4a5a0a5b-1A57B2B8B4E0"
+	l := labelOf(long + ".local")
+	if len(l) > 40 || !strings.HasPrefix(l, "sat12-bc178-") || strings.Contains(l, "--") ||
+		labelOf(long) != l || labelOf(long+"x") == l {
+		t.Errorf("labelOf(long) = %q", l)
+	}
+	if got := labelOf("My_PC.example.com"); got != "mypc" {
+		t.Errorf("labelOf = %q", got)
+	}
+	if got := labelOf("..."); got != "host" {
+		t.Errorf("labelOf(empty) = %q", got)
+	}
+}

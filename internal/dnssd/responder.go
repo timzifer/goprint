@@ -2,6 +2,7 @@ package dnssd
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"net/netip"
 	"strings"
@@ -220,6 +221,11 @@ type Responder struct {
 // so the responder follows changes. The host's addresses are those of
 // the machine's interfaces.
 func Respond(host string, instances func() []Instance) (*Responder, error) {
+	host = strings.TrimSuffix(strings.TrimSuffix(host, "."), ".local")
+	if host == "" || len(host) > 63 || strings.Contains(host, ".") {
+		// A longer label packs into no answer at all.
+		return nil, fmt.Errorf("dnssd: host %q is not a DNS label of 1 to 63 characters", host)
+	}
 	conn, err := net.ListenMulticastUDP("udp4", nil, ipv4Group)
 	if err != nil {
 		return nil, err
@@ -229,7 +235,7 @@ func Respond(host string, instances func() []Instance) (*Responder, error) {
 	_ = pc.SetMulticastLoopback(true)
 	r := &Responder{
 		z: &zone{
-			host:      fqdn(strings.TrimSuffix(strings.TrimSuffix(host, "."), ".local") + ".local"),
+			host:      host + ".local.",
 			instances: instances,
 			addrs:     hostAddrs,
 		},

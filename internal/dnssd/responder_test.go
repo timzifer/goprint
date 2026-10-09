@@ -5,6 +5,7 @@ import (
 	"net/netip"
 	"os"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -133,5 +134,11 @@ func TestRespondAndBrowse(t *testing.T) {
 	}
 	if s := ss[i]; s.Port != 8631 || s.TXT["rp"] != "printers/x" || len(s.Addrs) == 0 {
 		t.Errorf("found %+v", s)
+	}
+}
+
+func TestRespondRejectsLongHost(t *testing.T) {
+	if _, err := Respond(strings.Repeat("a", 64), func() []Instance { return nil }); err == nil {
+		t.Error("64-character host label accepted")
 	}
 }
