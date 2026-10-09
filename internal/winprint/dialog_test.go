@@ -7,10 +7,12 @@ import (
 	"context"
 	"errors"
 	"os"
+	"slices"
 	"testing"
 	"time"
 
 	"github.com/timzifer/goprint/internal/com"
+	"github.com/timzifer/goprint/internal/core"
 	"github.com/timzifer/goprint/internal/errdefs"
 	"github.com/timzifer/goprint/internal/testpdf"
 )
@@ -72,4 +74,22 @@ func TestPropertiesInteractive(t *testing.T) {
 		t.Fatalf("PropertiesDialog: %v", err)
 	}
 	t.Logf("printer %q, %d bytes DEVMODE, chosen %+v, warnings %v", res.Printer, len(res.DevMode), res.Chosen, res.Warnings)
+}
+
+func TestPreviewPages(t *testing.T) {
+	for _, tc := range []struct {
+		ranges []core.PageRange
+		n      int
+		want   []int
+	}{
+		{nil, 3, []int{0, 1, 2}},
+		{[]core.PageRange{{From: 2, To: 3}}, 5, []int{1, 2}},
+		{[]core.PageRange{{From: 4, To: 0}, {From: 1, To: 1}}, 5, []int{3, 4, 0}},
+		// Outside the document: the preview shows all, printing reports it.
+		{[]core.PageRange{{From: 9, To: 9}}, 2, []int{0, 1}},
+	} {
+		if got := previewPages(tc.ranges, tc.n); !slices.Equal(got, tc.want) {
+			t.Errorf("previewPages(%v, %d) = %v, want %v", tc.ranges, tc.n, got, tc.want)
+		}
+	}
 }

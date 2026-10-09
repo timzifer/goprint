@@ -107,9 +107,6 @@ func toTaskOptions(s Settings) (winprint.TaskOptions, []Warning) {
 	if len(s.PageRanges) > 0 {
 		warn("PageRanges", "the modern windows print dialog cannot preset page ranges; the user picks them")
 	}
-	if s.Scaling != ScalingDefault {
-		warn("Scaling", "not yet supported on windows")
-	}
 	if s.Tray != "" {
 		warn("Tray", "not yet supported on windows")
 	}
@@ -215,11 +212,13 @@ func (windowsBackend) dialog(ctx context.Context, doc Document, opts DialogOptio
 	if opts.Settings.Strict && len(warnings) > 0 {
 		return nil, Settings{}, fmt.Errorf("%w: %s", ErrUnsupported, warnings[0])
 	}
+	js, _ := toJobSettings(opts.Settings)
 	res, err := winprint.Dialog(ctx, src, winprint.DialogOptions{
 		Owner:    windows.HWND(opts.Owner),
 		Title:    title,
 		Presets:  presets,
 		PrintNow: opts.PrintNow,
+		Scaling:  js.Scaling,
 	})
 	if err != nil {
 		return nil, Settings{}, err

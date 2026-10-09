@@ -9,6 +9,7 @@ import (
 	"unsafe"
 
 	"github.com/timzifer/goprint/internal/com"
+	"github.com/timzifer/goprint/internal/core"
 )
 
 var (
@@ -30,7 +31,8 @@ type previewState struct {
 	mu     sync.Mutex
 	target *com.Unknown // IPrintPreviewDxgiPackageTarget
 	r      *renderer
-	paper  size // paper size in DIPs from the current options
+	paper  size  // paper size in DIPs from the current options
+	pages  []int // document pages (0-based) the user selected
 	white  []byte
 }
 
@@ -85,37 +87,69 @@ func (d *dialog) previewCollection(target *com.Unknown) (*com.Unknown, error) {
 	return coll, nil // the caller owns the reference
 }
 
+// paperSize returns the paper the print task options describe, in DIPs,
+// turned to the chosen orientation.
+func paperSize(options *com.Unknown) (size, error) {
+	oc, err := options.QueryInterface(&iidIPrintTaskOptionsCore)
+	if err != nil {
+		return size{}, err
+	}
+	defer oc.Release()
+	var desc pageDescription
+	if err := oc.CallHR("IPrintTaskOptionsCore.GetPageDescription", optionsCoreGetPageDescription, 1, uintptr(unsafe.Pointer(&desc))); err != nil {
+		return size{}, err
+	}
+	return desc.PageSize, nil
+}
+
+// previewPages returns the pages to preview: the selected ones, or all if
+// the selection is empty or lies outside the document (printing then
+// reports that).
+func previewPages(ranges []core.PageRange, n int) []int {
+	pages, _ := core.SelectPages(ranges, n)
+	if len(pages) == 0 {
+		pages, _ = core.SelectPages(nil, n)
+	}
+	return pages
+}
+
+// paginate runs whenever the user changes an option: the paper and the
+// selected pages are taken again.
 func (d *dialog) paginate(options *com.Unknown) error {
-	core, err := options.QueryInterface(&iidIPrintTaskOptionsCore)
+	paper, err := paperSize(options)
 	if err != nil {
 		return err
 	}
-	defer core.Release()
-	var desc pageDescription
-	if err := core.CallHR("IPrintTaskOptionsCore.GetPageDescription", optionsCoreGetPageDescription, 1, uintptr(unsafe.Pointer(&desc))); err != nil {
-		return err
+	ranges, err := customPageRanges(options)
+	if err != nil {
+		tracef("custom page ranges unavailable: %v", err)
 	}
 	p := &d.preview
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.paper = desc.PageSize
-	tracef("paginate: paper %.1fx%.1f DIP, %d pages", desc.PageSize.W, desc.PageSize.H, d.doc.pages)
+	p.paper = paper
+	p.pages = previewPages(ranges, d.doc.pages)
+	tracef("paginate: paper %.1fx%.1f DIP, ranges %v → %d pages", paper.W, paper.H, ranges, len(p.pages))
 	if p.target == nil {
 		return fmt.Errorf("winprint: paginate without preview target")
 	}
-	return p.target.CallHR("IPrintPreviewDxgiPackageTarget.SetJobPageCount", previewSetJobPageCount, pageCountFinal, uintptr(d.doc.pages))
+	return p.target.CallHR("IPrintPreviewDxgiPackageTarget.SetJobPageCount", previewSetJobPageCount, pageCountFinal, uintptr(len(p.pages)))
 }
 
 func (d *dialog) makePage(jobPage uint32) error {
 	if jobPage == jobPageApplicationDefined {
 		jobPage = 1
 	}
-	if jobPage < 1 || int(jobPage) > d.doc.pages {
-		return fmt.Errorf("winprint: preview page %d out of range", jobPage)
-	}
 	p := &d.preview
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	pages := p.pages
+	if pages == nil {
+		pages = previewPages(nil, d.doc.pages)
+	}
+	if jobPage < 1 || int(jobPage) > len(pages) {
+		return fmt.Errorf("winprint: preview page %d out of range", jobPage)
+	}
 	if p.target == nil {
 		return fmt.Errorf("winprint: preview without target")
 	}
@@ -130,7 +164,7 @@ func (d *dialog) makePage(jobPage uint32) error {
 	if paper.W <= 0 || paper.H <= 0 {
 		paper = size{816, 1056} // Letter in DIPs until paginated
 	}
-	page, sz, err := d.doc.page(int(jobPage) - 1)
+	page, sz, err := d.doc.page(pages[jobPage-1])
 	if err != nil {
 		return err
 	}
@@ -145,12 +179,13 @@ func (d *dialog) makePage(jobPage uint32) error {
 	}
 	defer surface.Release()
 
-	// The PDF page, scaled to fit and centered.
-	scale := math.Min(float64(paper.W)/float64(sz.W), float64(paper.H)/float64(sz.H))
-	dw := uint32(float64(sz.W) * scale * previewDPI / 96)
-	dh := uint32(float64(sz.H) * scale * previewDPI / 96)
+	// The PDF page placed as printing places it (addPage).
+	scale, dx, dy := core.Layout(float64(sz.W), float64(sz.H), float64(paper.W), float64(paper.H), d.opts.Scaling)
+	px := float64(previewDPI) / 96
+	dw := uint32(math.Round(float64(sz.W) * scale * px))
+	dh := uint32(math.Round(float64(sz.H) * scale * px))
 	params := pdfRenderParams{DestinationWidth: dw, DestinationHeight: dh, Background: [4]float32{1, 1, 1, 1}}
-	args := append([]uintptr{page.Ptr(), surface.Ptr()}, pointArgs(int32((pw-dw)/2), int32((ph-dh)/2))...)
+	args := append([]uintptr{page.Ptr(), surface.Ptr()}, pointArgs(int32(math.Round(dx*px)), int32(math.Round(dy*px)))...)
 	args = append(args, uintptr(unsafe.Pointer(&params)))
 	if err := p.r.pdf.CallHR("IPdfRendererNative.RenderPageToSurface", pdfRendererRenderPageToSurface, args...); err != nil {
 		return err

@@ -136,6 +136,10 @@ type DialogOptions struct {
 	// for the document; it is canceled right away, but print-to-file
 	// printers (e.g. "Microsoft Print to PDF") ask for a file name anyway.
 	PrintNow bool
+	// Scaling places the pages on the paper the user chose, in the
+	// preview and in print alike: a core.Scale* mode, 0 (ScaleAuto)
+	// shrinks pages that do not fit.
+	Scaling int
 }
 
 // DialogResult is the outcome of a confirmed dialog.
@@ -623,8 +627,15 @@ func (d *dialog) makeDocument(options, target *com.Unknown) error {
 		target.Call(targetCancel)
 		return fmt.Errorf("%w: selected pages are outside the document", errdefs.ErrInvalid)
 	}
-	tracef("MakeDocument: ranges %v → %d pages", ranges, len(pages))
-	err = job.writeTarget(context.Background(), r, d.doc, target, pages, 0, paperLayout{})
+	// The pages go onto the paper the user chose, as the preview shows
+	// them; left at their own size, the driver turns and crops them.
+	paper, err := paperSize(options)
+	if err != nil {
+		target.Call(targetCancel)
+		return err
+	}
+	tracef("MakeDocument: ranges %v → %d pages on %.1fx%.1f DIP", ranges, len(pages), paper.W, paper.H)
+	err = job.writeTarget(context.Background(), r, d.doc, target, pages, 0, paperLayout{Paper: paper, Scaling: d.opts.Scaling})
 	if err == nil {
 		// The user picked the printer; look it up while the job is still
 		// queued (it may leave the queue quickly).

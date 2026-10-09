@@ -68,10 +68,13 @@ func TestTaskOptionsWarnings(t *testing.T) {
 	for _, x := range w {
 		got[x.Setting] = true
 	}
-	for _, name := range []string{"Printer", "Media", "PageRanges", "Scaling", "Tray", "Vendor[k]"} {
+	for _, name := range []string{"Printer", "Media", "PageRanges", "Tray", "Vendor[k]"} {
 		if !got[name] {
 			t.Errorf("no warning for %s (got %v)", name, w)
 		}
+	}
+	if got["Scaling"] {
+		t.Error("Scaling is applied by the modern dialog now, no warning")
 	}
 }
 
