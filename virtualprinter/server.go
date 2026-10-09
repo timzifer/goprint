@@ -352,7 +352,9 @@ func (s *Server) print(ctx context.Context, pr Printer, host string, op, attrs i
 		return errorResponse(ipp.StatusErrorDocumentFormatError, "the document is not a PDF")
 	}
 	set.Printer = pr.Name
-	j, err := s.p.print(ctx, goprint.PDFBytes(title, doc), set, id)
+	d := goprint.PDFBytes(title, doc)
+	d.Attributes = attributesFromIPP(attrs)
+	j, err := s.p.print(ctx, d, set, id)
 	switch {
 	case errors.Is(err, goprint.ErrBusy):
 		return errorResponse(ipp.StatusErrorNotAcceptingJobs, "%v", err)

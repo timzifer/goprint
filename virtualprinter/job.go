@@ -20,6 +20,9 @@ type Job struct {
 	// a PDF with one image per page.
 	PDF      []byte
 	Warnings []goprint.Warning
+	// Attributes are the document's attributes ([goprint.Document]), also
+	// when they came over IPP.
+	Attributes map[string]string
 
 	mu    sync.Mutex
 	state goprint.JobState

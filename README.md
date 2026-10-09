@@ -171,6 +171,20 @@ processes and devices can print to them: goprint by printer URI
 printers, so `goprint.IPPEverywhere`, CUPS and other devices find them on
 the network.
 
+`Document.Attributes` carries values for whoever receives the job, e.g. a
+virtual printer that files documents in a DMS:
+
+```go
+doc := goprint.PDFFile("invoice.pdf")
+doc.Attributes = map[string]string{"customer": "4711", "type": "invoice"}
+// in-process or over IPP: vp.Jobs()[0].Attributes["customer"] == "4711"
+```
+
+They reach providers in the same process and IPP printers that list the job
+attribute `goprint-attributes` as supported (a virtualprinter server does).
+Spoolers, native dialogs and other printers do not pass them on; that is
+reported as an `Attributes` warning (an error with `Strict`).
+
 ### macOS: main thread
 
 AppKit runs only on the main thread. Lock the main goroutine to it in an

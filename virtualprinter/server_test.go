@@ -267,3 +267,38 @@ func TestSettingsFromIPPIgnoresJobDescription(t *testing.T) {
 		t.Errorf("unsupported %v", bad)
 	}
 }
+
+func TestAttributesInProcessAndOverIPP(t *testing.T) {
+	vp := New("v", Office("Office"))
+	attrs := map[string]string{"customer": "4711", "folder": "Invoices/2026"}
+	doc := goprint.PDFBytes("Invoice", a4PDF())
+	doc.Attributes = attrs
+
+	if _, err := goprint.NewClient(vp).Print(context.Background(), doc, goprint.Settings{Provider: "v"}); err != nil {
+		t.Fatal(err)
+	}
+	srv := serve(t, vp)
+	job, err := network.Print(context.Background(), doc, goprint.Settings{Provider: "ipp", Printer: srv.PrinterURI("Office")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(job.Warnings()) != 0 {
+		t.Errorf("warnings %v", job.Warnings())
+	}
+	jobs := vp.Jobs()
+	if len(jobs) != 2 {
+		t.Fatalf("%d jobs", len(jobs))
+	}
+	for i, j := range jobs {
+		if !reflect.DeepEqual(j.Attributes, attrs) {
+			t.Errorf("job %d attributes %v", i, j.Attributes)
+		}
+		if len(j.Settings.Vendor) != 0 {
+			t.Errorf("job %d vendor %v", i, j.Settings.Vendor)
+		}
+	}
+	attrs["customer"] = "changed"
+	if jobs[0].Attributes["customer"] != "4711" {
+		t.Error("job shares the caller's map")
+	}
+}

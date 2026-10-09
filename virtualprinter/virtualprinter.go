@@ -22,6 +22,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"maps"
 	"slices"
 	"sync"
 	"time"
@@ -233,14 +234,15 @@ func (p *Provider) print(ctx context.Context, doc goprint.Document, s goprint.Se
 		p.nextID++
 	}
 	j := &Job{
-		ID:       id,
-		Printer:  pr.Name,
-		Title:    doc.Title,
-		Settings: s,
-		PDF:      data,
-		Warnings: warnings,
-		state:    goprint.JobCompleted,
-		done:     make(chan struct{}),
+		ID:         id,
+		Printer:    pr.Name,
+		Title:      doc.Title,
+		Settings:   s,
+		Attributes: maps.Clone(doc.Attributes),
+		PDF:        data,
+		Warnings:   warnings,
+		state:      goprint.JobCompleted,
+		done:       make(chan struct{}),
 	}
 	if p.hold {
 		j.state = goprint.JobPending

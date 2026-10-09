@@ -4,7 +4,10 @@ import (
 	"context"
 	"image"
 	"io"
+	"slices"
 	"strings"
+
+	"github.com/timzifer/goprint/ipp"
 )
 
 // Document is the content to print. Exactly one of PDF or Images is set.
@@ -20,7 +23,23 @@ type Document struct {
 	Images []image.Image
 	// DPI is the resolution of Images. Required when Images is set.
 	DPI int
+
+	// Attributes are values of the job for whoever receives it, e.g. to
+	// file the document in a DMS (customer number, document type). They
+	// travel where the path allows: to providers in the same process
+	// (virtualprinter keeps them in Job.Attributes) and to IPP printers
+	// that list the job attribute [IPPAttributes] as supported, such as a
+	// virtualprinter server. Elsewhere (spoolers, native dialogs, other
+	// printers) they are reported as an "Attributes" warning. Keys must
+	// not be empty or contain "=".
+	Attributes map[string]string
 }
+
+// IPPAttributes is the IPP job attribute that carries
+// [Document.Attributes]: a 1setOf text with "key=value" values. goprint
+// sends it only to printers whose job-creation-attributes-supported
+// lists it.
+const IPPAttributes = "goprint-attributes"
 
 // Printer describes a print queue.
 type Printer struct {
@@ -169,5 +188,30 @@ func (d Document) validate() error {
 			return invalidf("document: image %d is nil", i)
 		}
 	}
+	for k := range d.Attributes {
+		if k == "" || strings.Contains(k, "=") {
+			return invalidf("document: attribute key %q is empty or contains '='", k)
+		}
+	}
 	return nil
+}
+
+// attributesWarning reports Document.Attributes that do not reach the
+// receiver.
+func attributesWarning(why string) Warning {
+	return Warning{"Attributes", why}
+}
+
+// ippAttributeValues encodes attributes for IPPAttributes, sorted by key.
+func ippAttributeValues(attrs map[string]string) []ipp.Value {
+	keys := make([]string, 0, len(attrs))
+	for k := range attrs {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	vs := make([]ipp.Value, len(keys))
+	for i, k := range keys {
+		vs[i] = ipp.Text(k + "=" + attrs[k])
+	}
+	return vs
 }
