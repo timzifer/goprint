@@ -3,18 +3,21 @@ package virtualprinter
 import (
 	"bytes"
 	"context"
+	"crypto/sha1"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/timzifer/goprint"
+	"github.com/timzifer/goprint/internal/dnssd"
 	"github.com/timzifer/goprint/ipp"
 )
 
@@ -32,8 +35,9 @@ type Server struct {
 	mu      sync.Mutex
 	created map[int]createdJob // Create-Job without Send-Document yet
 
-	ln   net.Listener
-	http *http.Server
+	ln        net.Listener
+	http      *http.Server
+	responder *dnssd.Responder
 }
 
 type createdJob struct {
@@ -78,8 +82,93 @@ func (s *Server) PrinterURI(name string) string {
 	return "ipp://" + net.JoinHostPort(host, port) + printerPath(name)
 }
 
-// Close stops the server.
-func (s *Server) Close() error { return s.http.Close() }
+// Close stops the server and its announcement.
+func (s *Server) Close() error {
+	s.mu.Lock()
+	r := s.responder
+	s.responder = nil
+	s.mu.Unlock()
+	if r != nil {
+		_ = r.Close() // sends goodbye records
+	}
+	return s.http.Close()
+}
+
+// Advertise announces the provider's printers on the local network with
+// DNS-SD (multicast DNS), as IPP Everywhere printers (_ipp._tcp, subtypes
+// _print and _universal), until Close. goprint's IPPEverywhere provider,
+// CUPS and phones find them then. Printers added or removed later are
+// answered for as they are; the TXT records carry the IPP Everywhere and
+// AirPrint keys for a PDF printer. The responder shares port 5353 with
+// the system's (Avahi, Bonjour, Windows); it does not probe for name
+// conflicts, so printer names should be unique on the network.
+func (s *Server) Advertise() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.responder != nil {
+		return nil
+	}
+	_, portStr, _ := net.SplitHostPort(s.ln.Addr().String())
+	port, _ := strconv.Atoi(portStr)
+	host := hostLabel() + "-goprint-" + portStr
+	r, err := dnssd.Respond(host, func() []dnssd.Instance { return s.instances(host, port) })
+	if err != nil {
+		return fmt.Errorf("virtualprinter: announcing printers: %w", err)
+	}
+	s.responder = r
+	return nil
+}
+
+// instances are the DNS-SD instances of the provider's printers.
+func (s *Server) instances(host string, port int) []dnssd.Instance {
+	ps, _ := s.p.Printers(context.Background())
+	out := make([]dnssd.Instance, 0, len(ps))
+	for _, pr := range ps {
+		yn := map[bool]string{true: "T", false: "F"}
+		ty := pr.Description
+		if ty == "" {
+			ty = pr.Name
+		}
+		sum := sha1.Sum([]byte(host + "/" + pr.Name))
+		uuid := fmt.Sprintf("%x-%x-%x-%x-%x", sum[0:4], sum[4:6], sum[6:8], sum[8:10], sum[10:16])
+		out = append(out, dnssd.Instance{
+			Name:     pr.Name,
+			Type:     "_ipp._tcp",
+			Subtypes: []string{"_print", "_universal"},
+			Port:     port,
+			TXT: []string{
+				"txtvers=1",
+				"qtotal=1",
+				"rp=" + strings.TrimPrefix(printerPath(pr.Name), "/"),
+				"ty=" + ty,
+				"note=" + pr.Location,
+				"product=(goprint virtual printer)",
+				"pdl=application/pdf",
+				"Color=" + yn[pr.Caps.Color],
+				"Duplex=" + yn[pr.Caps.Duplex],
+				"UUID=" + uuid,
+				"kind=document",
+			},
+		})
+	}
+	return out
+}
+
+// hostLabel is the machine's host name as a DNS label.
+func hostLabel() string {
+	h, _ := os.Hostname()
+	h, _, _ = strings.Cut(h, ".")
+	var b strings.Builder
+	for _, r := range strings.ToLower(h) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' {
+			b.WriteRune(r)
+		}
+	}
+	if b.Len() == 0 {
+		return "host"
+	}
+	return b.String()
+}
 
 func printerPath(name string) string { return "/printers/" + url.PathEscape(name) }
 

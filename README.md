@@ -167,6 +167,9 @@ pdf := vp.Jobs()[0].PDF
 processes and devices can print to them: goprint by printer URI
 (`srv.PrinterURI("Office")`), or CUPS with
 `lpadmin -p virtual -E -v ipp://host:8631/printers/Office -m everywhere`.
+`srv.Advertise()` also announces them with DNS-SD as IPP Everywhere
+printers, so `goprint.IPPEverywhere`, CUPS and other devices find them on
+the network.
 
 ### macOS: main thread
 
