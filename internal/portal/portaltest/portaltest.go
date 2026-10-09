@@ -1,4 +1,4 @@
-//go:build linux || freebsd || openbsd || netbsd || dragonfly
+//go:build (linux && !android) || freebsd || openbsd || netbsd || dragonfly
 
 // Package portaltest runs a private D-Bus session with a fake
 // org.freedesktop.portal.Print implementation for tests.

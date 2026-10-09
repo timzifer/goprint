@@ -109,7 +109,7 @@ jobs:
         run: go mod tidy -diff
       - name: go vet
         run: |
-          for goos in linux darwin windows freebsd; do
+          for goos in linux darwin windows freebsd android; do
             echo "::group::GOOS=$goos"; GOOS=$goos go vet ./...; echo "::endgroup::"
           done
       - name: staticcheck
@@ -134,6 +134,7 @@ jobs:
           - { goos: linux, goarch: "386" }
           - { goos: linux, goarch: arm }
           - { goos: js, goarch: wasm }
+          - { goos: android, goarch: arm64 }
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -145,6 +146,27 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
         run: |
           go build ./...
+          go test -c -o /dev/null .
+
+  cross-compile-ios:
+    # GOOS=ios links only externally, so even go list needs cgo and the
+    # iPhoneOS SDK's clang, which only macOS runners have.
+    name: build ios/arm64
+    runs-on: macos-latest
+    env:
+      GOOS: ios
+      GOARCH: arm64
+      CGO_ENABLED: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+      - name: Build
+        run: |
+          export CC="$(xcrun --sdk iphoneos --find clang) -isysroot $(xcrun --sdk iphoneos --show-sdk-path) -arch arm64"
+          go vet ./...
+          go build $(go list -f '{{if ne .Name "main"}}{{.ImportPath}}{{end}}' ./...)
           go test -c -o /dev/null .
 
   integration-cups:
@@ -255,7 +277,7 @@ jobs:
 
   ci-ok:
     if: always()
-    needs: [test, coverage, lint, cross-compile, integration-cups, integration-portal, macos-dialog, fyneprint]
+    needs: [test, coverage, lint, cross-compile, cross-compile-ios, integration-cups, integration-portal, macos-dialog, fyneprint]
     runs-on: ubuntu-latest
     steps:
       - name: All jobs succeeded

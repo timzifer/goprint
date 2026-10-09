@@ -60,6 +60,9 @@
 // modern dialog with live preview or the classic PrintDlgEx (see
 // [DialogStyle] and [DialogOptions.PrintNow]).
 //
+// Android and iOS are not supported yet: every call returns
+// [ErrUnsupported].
+//
 // # Main thread (macOS)
 //
 // AppKit, and so the print panel, runs only on the process's main thread.
