@@ -5,7 +5,6 @@ package goprint
 import (
 	"context"
 	"fmt"
-	"io"
 	"net/url"
 	"path"
 	"strings"
@@ -34,27 +33,6 @@ func (b darwinBackend) capabilities(ctx context.Context, printer string) (Capabi
 		c.DialogPreview = true
 	}
 	return c, err
-}
-
-// readPDF returns the whole document as PDF; PDFKit takes it as NSData.
-func readPDF(doc Document) ([]byte, error) {
-	src, err := doc.open()
-	if err != nil {
-		return nil, err
-	}
-	defer src.Close()
-	b, err := io.ReadAll(src)
-	if err != nil {
-		return nil, fmt.Errorf("goprint: reading document: %w", err)
-	}
-	return b, nil
-}
-
-func docTitle(doc Document) string {
-	if doc.Title == "" {
-		return "Document"
-	}
-	return doc.Title
 }
 
 // dialog shows the print panel. The panel runs on the main thread (see

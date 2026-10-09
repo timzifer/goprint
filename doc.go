@@ -72,8 +72,11 @@
 // modern dialog with live preview or the classic PrintDlgEx (see
 // [DialogStyle] and [DialogOptions.PrintNow]).
 //
-// Android and iOS are not supported yet: every call returns
-// [ErrUnsupported].
+// On iOS the dialog is UIKit's print sheet (AirPrint); without PrintNow it
+// only picks a printer. iOS lists no printers to apps: Print reaches a
+// printer by the URL the dialog returned. Dialog and Print wait for
+// UIKit's main thread and must be called from another goroutine.
+// Android is not supported yet: every call returns [ErrUnsupported].
 //
 // # Main thread (macOS)
 //

@@ -196,7 +196,8 @@ returned `Job` cannot be tracked and reports completed.
 | macOS     | IPP to CUPS                      | `NSPrintOperation` via purego             |
 | Windows   | PDF → Direct2D → XPS → spooler   | Modern (`PrintManager`, preview) or classic (`PrintDlgEx`) |
 | any       | IPP Everywhere printers by URI, or found via DNS-SD (`IPPEverywhere`) | –          |
-| Android, iOS | not yet: every call returns `ErrUnsupported` | –                         |
+| iOS       | to a printer URL picked in the dialog (`printToPrinter:`) | UIKit print sheet (AirPrint), or the printer picker without `PrintNow` |
+| Android   | not yet: every call returns `ErrUnsupported` | –                         |
 
 ## Packages
 
