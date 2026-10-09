@@ -318,6 +318,45 @@ func printToFile(pdf []byte, o Options, path string) (Result, error) {
 	return result(info), nil
 }
 
+// Print runs the PDFKit print operation for pdf without any panel and
+// hands the job to the macOS print system, laid out by PDFKit exactly as
+// the dialog prints it. It runs on the main thread (see OnMain) and
+// returns ErrWrongThread if that cannot be reached.
+func Print(pdf []byte, o Options) (Result, error) {
+	var r Result
+	var err error
+	if lerr := OnMain(func() { r, err = printSpool(pdf, o) }); lerr != nil {
+		return Result{}, lerr
+	}
+	return r, err
+}
+
+func printSpool(pdf []byte, o Options) (Result, error) {
+	if err := load(); err != nil {
+		return Result{}, err
+	}
+	defer autoreleasePool()()
+	s, err := newSession(pdf, o)
+	if err != nil {
+		return Result{}, err
+	}
+	defer s.release()
+	op, err := s.operation(o)
+	if err != nil {
+		return Result{}, err
+	}
+	op.Send(selSetShowsPrintPanel, false)
+	op.Send(selSetShowsProgressPanel, false)
+	if !objc.Send[bool](op, selRunOperation) {
+		return Result{}, fmt.Errorf("macprint: print operation failed")
+	}
+	info := op.Send(selPrintInfo)
+	if info == 0 {
+		info = s.info
+	}
+	return result(info), nil
+}
+
 // Dialog shows the print panel preset with o and returns the user's
 // choice. With printNow it runs the PDFKit print operation with the panel
 // and its live preview, and the operation prints (or saves, or opens

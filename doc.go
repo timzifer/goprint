@@ -68,7 +68,9 @@
 //
 // Linux/BSD and macOS print through CUPS over IPP (no libcups); printers
 // given by URI ("ipp://…", "ipps://…") are reached directly on every
-// platform, including Windows. Windows renders the PDF with
+// platform, including Windows. On macOS, jobs that set an Orientation or
+// Scaling are laid out by PDFKit instead, as the print panel does, when the
+// main thread is reachable (see [RunMain]). Windows renders the PDF with
 // Windows.Data.Pdf and Direct2D into an XPS job for the spooler.
 //
 // Dialogs: the desktop's dialog through xdg-desktop-portal on Linux/BSD,

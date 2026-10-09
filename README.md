@@ -215,7 +215,7 @@ returned `Job` cannot be tracked and reports completed.
 | Platform  | Headless                         | Dialog                                    |
 |-----------|----------------------------------|-------------------------------------------|
 | Linux/BSD | IPP to CUPS (no libcups)         | xdg-desktop-portal (`org.freedesktop.portal.Print`) |
-| macOS     | IPP to CUPS                      | `NSPrintOperation` via purego             |
+| macOS     | IPP to CUPS; PDFKit for orientation/scaling |  `NSPrintOperation` via purego             |
 | Windows   | PDF → Direct2D → XPS → spooler   | Modern (`PrintManager`, preview) or classic (`PrintDlgEx`) |
 | any       | IPP Everywhere printers by URI, or found via DNS-SD (`IPPEverywhere`) | –          |
 | iOS       | to a printer URL picked in the dialog (`printToPrinter:`) | UIKit print sheet (AirPrint), or the printer picker without `PrintNow` |
