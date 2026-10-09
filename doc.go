@@ -76,7 +76,10 @@
 // only picks a printer. iOS lists no printers to apps: Print reaches a
 // printer by the URL the dialog returned. Dialog and Print wait for
 // UIKit's main thread and must be called from another goroutine.
-// Android is not supported yet: every call returns [ErrUnsupported].
+// On Android the dialog is the system's print dialog (PrintManager); it
+// needs cgo and a runner that lends goprint the Java VM and the Activity
+// ([SetAndroidRunner]; fyneprint installs one). Android lists no
+// printers to apps; Print reaches only printer URLs, over IPP.
 //
 // # Main thread (macOS)
 //

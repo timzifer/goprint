@@ -1,4 +1,4 @@
-//go:build android || !(linux || freebsd || openbsd || netbsd || dragonfly || darwin || windows)
+//go:build (android && !cgo) || !(linux || freebsd || openbsd || netbsd || dragonfly || darwin || windows)
 
 package goprint
 
