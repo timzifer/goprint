@@ -31,6 +31,8 @@ var (
 	iidIAsyncOperationBool              = com.MustGUID("cdb5efb3-5788-509d-9be1-71ccb8a3362a")
 	iidPrintTaskRequestedHandler        = com.MustGUID("8a8cb877-70c5-54ce-8b42-d790e2914859") // TypedEventHandler<PrintManager, PrintTaskRequestedEventArgs>
 	iidPrintTaskCompletedHandler        = com.MustGUID("b0b02549-b9ad-5226-898a-7b563b46640c") // TypedEventHandler<PrintTask, PrintTaskCompletedEventArgs>
+	iidOptionChangedHandler             = com.MustGUID("1b1f456b-8821-592e-b4a7-9b4c3712518e") // TypedEventHandler<PrintTaskOptionDetails, PrintTaskOptionChangedEventArgs>
+	iidIPrintTaskOptionDetailsStatic    = com.MustGUID("135da193-0961-4b6e-8766-f13b7fbccd58")
 	iidIPrintTaskSourceRequestedHandler = com.MustGUID("6c109fa8-5cb6-4b3a-8663-f39cb02dc9b4")
 	iidIPrintTaskOptionsCore            = com.MustGUID("1bdbb474-4ed1-41eb-be3c-72d18ed67337")
 	iidIPrintTaskOptionsCoreProperties  = com.MustGUID("c1b71832-9e93-4e55-814b-3326a59efce1")
@@ -97,8 +99,12 @@ const (
 	pageRangeGetFirst = 6
 	pageRangeGetLast  = 7
 
-	previewSetJobPageCount = 3
-	previewDrawPage        = 4
+	previewSetJobPageCount   = 3
+	previewDrawPage          = 4
+	previewInvalidatePreview = 5
+
+	optionDetailsStaticGetFromPrintTaskOptions = 6
+	optionDetailsAddOptionChanged              = 9
 
 	pageCountFinal            = 0
 	jobPageApplicationDefined = 0xFFFFFFFF
@@ -179,6 +185,8 @@ type dialog struct {
 	source           *com.Unknown // IPrintDocumentSource
 	sourceHandler    *com.Unknown
 	completedHandler *com.Unknown
+	optionHandler    *com.Unknown
+	optionDetails    *com.Unknown // IPrintTaskOptionDetails, holds the subscription
 }
 
 var (
@@ -203,6 +211,13 @@ var (
 		defer com.Guard(&hr)
 		if d, ok := com.Lookup(this).(*dialog); ok {
 			d.onCompleted((*com.Unknown)(com.Ptr(sender)), (*com.Unknown)(com.Ptr(args)))
+		}
+		return com.S_OK
+	}))
+	optionChangedVT = com.NewVTable(com.Method(func(this, sender, args uintptr) (hr uintptr) {
+		defer com.Guard(&hr)
+		if d, ok := com.Lookup(this).(*dialog); ok {
+			d.preview.invalidate()
 		}
 		return com.S_OK
 	}))
@@ -279,6 +294,9 @@ func runDialog(ctx context.Context, data []byte, opts DialogOptions) (*DialogRes
 	defer d.close()
 
 	if d.sourceHandler, err = com.NewObject(sourceRequestedVT, d, iidIPrintTaskSourceRequestedHandler); err != nil {
+		return nil, err
+	}
+	if d.optionHandler, err = com.NewObject(optionChangedVT, d, iidOptionChangedHandler); err != nil {
 		return nil, err
 	}
 	if d.completedHandler, err = com.NewObject(taskCompletedVT, d, iidPrintTaskCompletedHandler); err != nil {
@@ -417,6 +435,9 @@ func (d *dialog) onTaskRequested(args *com.Unknown) {
 	if err := enablePageRanges(task); err != nil {
 		tracef("page range selection unavailable: %v", err) // older Windows
 	}
+	if err := d.watchOptions(task); err != nil {
+		tracef("option changes not followed: %v", err)
+	}
 	var token int64
 	if err := task.CallHR("PrintTask.add_Completed", printTaskAddCompleted, d.completedHandler.Ptr(), uintptr(unsafe.Pointer(&token))); err != nil {
 		d.fail(err)
@@ -446,6 +467,44 @@ func (d *dialog) onCompleted(task, args *com.Unknown) {
 	default:
 		close(d.completed)
 	}
+}
+
+// watchOptions subscribes to option changes. The dialog paginates the
+// preview again on its own for the standard options, but not for the page
+// range; the preview is invalidated on every change instead.
+func (d *dialog) watchOptions(task *com.Unknown) error {
+	var opts *com.Unknown
+	if err := task.CallHR("PrintTask.get_Options", printTaskGetOptions, uintptr(unsafe.Pointer(&opts))); err != nil {
+		return err
+	}
+	defer opts.Release()
+	oc, err := opts.QueryInterface(&iidIPrintTaskOptionsCore)
+	if err != nil {
+		return err
+	}
+	defer oc.Release()
+	statics, err := com.ActivationFactory("Windows.Graphics.Printing.OptionDetails.PrintTaskOptionDetails", &iidIPrintTaskOptionDetailsStatic)
+	if err != nil {
+		return err
+	}
+	defer statics.Release()
+	var details *com.Unknown
+	if err := statics.CallHR("PrintTaskOptionDetails.GetFromPrintTaskOptions", optionDetailsStaticGetFromPrintTaskOptions,
+		oc.Ptr(), uintptr(unsafe.Pointer(&details))); err != nil {
+		return err
+	}
+	var token int64
+	if err := details.CallHR("PrintTaskOptionDetails.add_OptionChanged", optionDetailsAddOptionChanged,
+		d.optionHandler.Ptr(), uintptr(unsafe.Pointer(&token))); err != nil {
+		details.Release()
+		return err
+	}
+	d.mu.Lock()
+	old := d.optionDetails
+	d.optionDetails = details
+	d.mu.Unlock()
+	old.Release()
+	return nil
 }
 
 func taskOptions(task *com.Unknown) (*com.Unknown, error) {
@@ -662,7 +721,12 @@ func (d *dialog) close() {
 		task.Release()
 	}
 	d.preview.close()
-	for _, u := range []*com.Unknown{d.source, d.sourceHandler, d.completedHandler} {
+	d.mu.Lock()
+	details := d.optionDetails
+	d.optionDetails = nil
+	d.mu.Unlock()
+	details.Release()
+	for _, u := range []*com.Unknown{d.source, d.sourceHandler, d.completedHandler, d.optionHandler} {
 		u.Release()
 	}
 	d.doc.Close()

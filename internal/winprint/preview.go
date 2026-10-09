@@ -239,6 +239,25 @@ func (p *previewState) whiteSurface(w, h uint32) (*com.Unknown, error) {
 	return tex.QueryInterface(&iidIDXGISurface)
 }
 
+// invalidate makes the dialog paginate and draw the preview again. It is
+// called without p.mu held: the dialog may paginate right away.
+func (p *previewState) invalidate() {
+	p.mu.Lock()
+	t := p.target
+	if t != nil {
+		t.AddRef()
+	}
+	p.mu.Unlock()
+	if t == nil {
+		return
+	}
+	defer t.Release()
+	tracef("option changed: invalidating the preview")
+	if err := t.CallHR("IPrintPreviewDxgiPackageTarget.InvalidatePreview", previewInvalidatePreview); err != nil {
+		tracef("InvalidatePreview: %v", err)
+	}
+}
+
 func (p *previewState) close() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
