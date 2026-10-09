@@ -30,15 +30,16 @@ func ExampleNewClient() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	for _, p := range printers {
-		// Provider and Name together address the printer.
-		job, err := c.Print(ctx, goprint.PDFFile("label.pdf"), goprint.Settings{Provider: p.Provider, Printer: p.Name})
-		if err != nil {
-			log.Fatal(err)
-		}
-		fmt.Println(job.ID())
-		break
+	if len(printers) == 0 {
+		return
 	}
+	// Provider and Name together address a printer.
+	p := printers[0]
+	job, err := c.Print(ctx, goprint.PDFFile("label.pdf"), goprint.Settings{Provider: p.Provider, Printer: p.Name})
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(job.ID())
 }
 
 func ExamplePrint() {

@@ -118,6 +118,7 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version: "1.27.1"
+          cache: false # the first setup-go already restored the module cache
       - name: staticcheck
         uses: dominikh/staticcheck-action@v1
         with:
@@ -280,6 +281,7 @@ jobs:
         if: runner.os == 'Linux'
         with:
           go-version: "1.27.1"
+          cache: false # the first setup-go already restored the module cache
       - name: staticcheck
         if: runner.os == 'Linux'
         uses: dominikh/staticcheck-action@v1
