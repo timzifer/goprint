@@ -3,8 +3,11 @@
 package goprint
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"net/url"
 	"path"
 	"strings"
@@ -33,6 +36,37 @@ func (b darwinBackend) capabilities(ctx context.Context, printer string) (Capabi
 		c.DialogPreview = true
 	}
 	return c, err
+}
+
+// print submits through CUPS, except for jobs that ask for an orientation
+// or scaling: the macOS PDF filter turns the paper for
+// orientation-requested but does not shrink the pages onto it (a portrait
+// page in landscape comes out cut up across sheets). Those are laid out
+// by PDFKit like the print panel does, when the main thread can be reached
+// (RunMain or SetMainThreadRunner); the job is then looked up in CUPS.
+func (b darwinBackend) print(ctx context.Context, src io.Reader, doc Document, s Settings) (*Job, error) {
+	if !needsPDFKitLayout(s) {
+		return b.ippBackend.print(ctx, src, doc, s)
+	}
+	pdf, err := io.ReadAll(src)
+	if err != nil {
+		return nil, fmt.Errorf("goprint: reading document: %w", err)
+	}
+	title := docTitle(doc)
+	o, warnings := toMacOptions(s, title)
+	baseline := b.newestJobID(ctx)
+	res, err := macprint.Print(pdf, o)
+	if errors.Is(err, ErrWrongThread) {
+		return b.ippBackend.print(ctx, bytes.NewReader(pdf), doc, s)
+	}
+	if err != nil {
+		return nil, err
+	}
+	printer := s.Printer
+	if res.Printer != "" {
+		printer = res.Printer
+	}
+	return b.dialogJob(ctx, res, printer, title, baseline, warnings), nil
 }
 
 // dialog shows the print panel. The panel runs on the main thread (see

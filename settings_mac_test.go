@@ -175,3 +175,26 @@ func TestPickSpooledJob(t *testing.T) {
 		})
 	}
 }
+
+func TestNeedsPDFKitLayout(t *testing.T) {
+	tests := []struct {
+		name string
+		s    Settings
+		want bool
+	}{
+		{"defaults", Settings{Copies: 2, Media: MediaA4}, false},
+		{"landscape", Settings{Orientation: Landscape}, true},
+		{"portrait", Settings{Orientation: Portrait}, true},
+		{"scaling", Settings{Scaling: ScalingFit}, true},
+		{"one range", Settings{Orientation: Landscape, PageRanges: []PageRange{{From: 2, To: 3}}}, true},
+		{"several ranges", Settings{Orientation: Landscape, PageRanges: []PageRange{{From: 1, To: 1}, {From: 3, To: 3}}}, false},
+		{"strict", Settings{Orientation: Landscape, Strict: true}, false},
+		{"credentials", Settings{Orientation: Landscape, Credentials: &Credentials{Username: "u"}}, false},
+		{"uri", Settings{Orientation: Landscape, Printer: "ipp://host/ipp/print"}, false},
+	}
+	for _, tt := range tests {
+		if got := needsPDFKitLayout(tt.s); got != tt.want {
+			t.Errorf("%s: needsPDFKitLayout = %v; want %v", tt.name, got, tt.want)
+		}
+	}
+}

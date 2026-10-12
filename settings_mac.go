@@ -219,3 +219,14 @@ func pickSpooledJob(jobs []spooledJob, baseline int, title string) (spooledJob, 
 	}
 	return spooledJob{}, false
 }
+
+// needsPDFKitLayout reports whether a job with s is printed through PDFKit
+// instead of CUPS on macOS: it asks for an orientation or scaling, which
+// the macOS PDF filter does not lay out, and has nothing PDFKit cannot
+// express (strict fidelity, IPP URIs, credentials, several page ranges).
+func needsPDFKitLayout(s Settings) bool {
+	if s.Orientation == OrientationDefault && s.Scaling == ScalingDefault {
+		return false
+	}
+	return !s.Strict && s.Credentials == nil && !isPrinterURI(s.Printer) && len(s.PageRanges) <= 1
+}
