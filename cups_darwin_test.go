@@ -64,7 +64,7 @@ func TestMacCUPSLandscape(t *testing.T) {
 		{"pdfkit landscape", goprint.Settings{Printer: queue, Media: goprint.MediaA4, Orientation: goprint.Landscape}},
 		{"pdfkit landscape fit", goprint.Settings{Printer: queue, Media: goprint.MediaA4, Orientation: goprint.Landscape, Scaling: goprint.ScalingFit}},
 		{"pdfkit landscape no media", goprint.Settings{Printer: queue, Orientation: goprint.Landscape}},
-		{"ipp landscape", goprint.Settings{Printer: queue, Media: goprint.MediaA4, Orientation: goprint.Landscape, PageRanges: []goprint.PageRange{{From: 1, To: 1}, {From: 1, To: 1}}}},
+		{"ipp landscape", goprint.Settings{Printer: queue, Media: goprint.MediaA4, Orientation: goprint.Landscape, Strict: true}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			vp.Reset()
