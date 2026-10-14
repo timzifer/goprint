@@ -1,10 +1,10 @@
 module github.com/timzifer/goprint/fyneprint
 
-go 1.26.4
+go 1.27.1
 
 require (
 	fyne.io/fyne/v2 v2.8.1
-	github.com/timzifer/cera v0.6.0
+	github.com/timzifer/cera v0.7.0
 	github.com/timzifer/fyne-pdf v0.4.0
 	github.com/timzifer/goprint v0.6.0
 )
@@ -30,10 +30,10 @@ require (
 	github.com/getsentry/sentry-go v0.46.0 // indirect
 	github.com/go-gl/gl v0.0.0-20260331235117-4566fea9a276 // indirect
 	github.com/go-gl/glfw/v3.4/glfw v0.1.0-pre.1.0.20260707082822-2a407d02d01a // indirect
-	github.com/go-images/jpeg v0.2.0 // indirect
-	github.com/go-images/jpeg2000 v0.13.2 // indirect
-	github.com/go-opentype/fonts v0.10.0 // indirect
-	github.com/go-opentype/opentype v0.13.0 // indirect
+	github.com/go-images/jpeg v0.3.0 // indirect
+	github.com/go-images/jpeg2000 v0.13.3 // indirect
+	github.com/go-opentype/fonts v0.12.0 // indirect
+	github.com/go-opentype/opentype v0.15.0 // indirect
 	github.com/go-pdfkit/reader v0.6.1 // indirect
 	github.com/go-text/render v0.2.1 // indirect
 	github.com/go-text/typesetting v0.3.4 // indirect
