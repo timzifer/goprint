@@ -4,8 +4,8 @@ go 1.26.4
 
 require (
 	fyne.io/fyne/v2 v2.8.1
-	github.com/timzifer/cera v0.6.0
-	github.com/timzifer/fyne-pdf v0.4.0
+	github.com/timzifer/cera v0.6.1
+	github.com/timzifer/fyne-pdf v0.5.0
 	github.com/timzifer/goprint v0.6.0
 )
 
@@ -34,7 +34,6 @@ require (
 	github.com/go-images/jpeg2000 v0.13.2 // indirect
 	github.com/go-opentype/fonts v0.10.0 // indirect
 	github.com/go-opentype/opentype v0.13.0 // indirect
-	github.com/go-pdfkit/reader v0.6.1 // indirect
 	github.com/go-text/render v0.2.1 // indirect
 	github.com/go-text/typesetting v0.3.4 // indirect
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
