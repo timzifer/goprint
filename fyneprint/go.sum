@@ -51,8 +51,6 @@ github.com/go-opentype/fonts v0.10.0 h1:9f7ik795SlBEJjz6iqBE/ZV2PaTauAj537MMWw9t
 github.com/go-opentype/fonts v0.10.0/go.mod h1:b+o8v1zDZ6B3GixA398jGILAh09+WwfyoYz52zKe7DA=
 github.com/go-opentype/opentype v0.13.0 h1:q9K7IGDfwMP/ik51ZkwiYf6jbaqPfocvAIuojetd0UQ=
 github.com/go-opentype/opentype v0.13.0/go.mod h1:AOixevJf7XQaH7+WG+OMIOZEbYPXfMqklVk26Y6YTUU=
-github.com/go-pdfkit/reader v0.6.1 h1:/ZqCbW9A/77nigMtEvl+MH9MGVf+KRIKopDVcdwcU4o=
-github.com/go-pdfkit/reader v0.6.1/go.mod h1:fQFOVfCMUui1AdvD4qhimdyvvNr9KvvJ1S7IuKZjyV8=
 github.com/go-text/render v0.2.1 h1:qwHhxqGUjjg4L0XyJWj7M7bpY75NZM+kBpv2Yfw5mcg=
 github.com/go-text/render v0.2.1/go.mod h1:HCCAq8MUlm/WRcXshBb4K/n+IkjeXQ1c2Ba+yICSm0A=
 github.com/go-text/typesetting v0.3.4 h1:YYurUOtEb9kGSOz4uE3k4OpBGsp1dDL8+fjCeaFamAU=
@@ -104,10 +102,10 @@ github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
 github.com/tannevaled/gobig2 v0.2.0 h1:yx97/ltljALrIWDFVqHjPUIjAp3bfUUhH8Z8UROvNLc=
 github.com/tannevaled/gobig2 v0.2.0/go.mod h1:X0S1H+N35kg6zYgVYRqGMsGj3C35zs+iA2r1MXyPcV4=
-github.com/timzifer/cera v0.6.0 h1:UvF9tn6451Vuzq/uThQT69/l2l7zuHac6K8S0XeqBeI=
-github.com/timzifer/cera v0.6.0/go.mod h1:t4kSz0Q8htzHFA45Cl5haNbb0/0L8RgzD9gT+fKIn6U=
-github.com/timzifer/fyne-pdf v0.4.0 h1:KPzO7PagW+pIacE74r+f6mkdwt3OGVlz8Cg9A18EMZI=
-github.com/timzifer/fyne-pdf v0.4.0/go.mod h1:vQV5unBOcTUTYb1KegSTbmuVTObdEi7jVXfh/eojW2g=
+github.com/timzifer/cera v0.6.1 h1:Iwi/3QQTeB9Y8nAH0Am8iRAwI6ow62n/75IS2JCIkxU=
+github.com/timzifer/cera v0.6.1/go.mod h1:t4kSz0Q8htzHFA45Cl5haNbb0/0L8RgzD9gT+fKIn6U=
+github.com/timzifer/fyne-pdf v0.5.0 h1:91loKsQayqdE3F/kDVQkxkNdJtuGi5in/r0r42hMSW4=
+github.com/timzifer/fyne-pdf v0.5.0/go.mod h1:7PsUSkfPKklhxBlE1deZ3Y8wNv4ld4kUnp0/oZruZug=
 github.com/timzifer/fyne_iconkit v0.1.0 h1:wV5BTYlf4aQLvytjD5ko652t8l084hUb3srAgA4d1R4=
 github.com/timzifer/fyne_iconkit v0.1.0/go.mod h1:ggIwGNaasc8fz5UHvY7+lJwLHTNsMMDenqCZ71zDxY8=
 github.com/timzifer/fyne_lucide v1.2.0 h1:0wHikxvAl+Qkwc2HPCJt9aSv3O7v64hiWCLnEWUHqPo=
