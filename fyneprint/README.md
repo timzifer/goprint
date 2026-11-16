@@ -61,7 +61,7 @@ fyneprint.ShowPrintDialog(w, goprint.PDFFile("report.pdf"),
   `ShowFilePrinters` is set. `NoFileOutput` keeps the dialog away from the
   file system: no file printers at all, and no save button unless `SavePDF`
   hands the PDF to the app. Pages are copied as they are, not re-rendered
-  ([cera](https://github.com/timzifer/cera)'s `pdfedit`); encrypted files
+  ([cera](https://github.com/timzifer/cera)'s editor); encrypted files
   whose permissions forbid reassembling them cannot be saved in parts.
 - **Accessibility:** the dialog is drawn by Fyne. It works with the keyboard
   (Tab moves between the controls), but Fyne has no screen reader support yet. Use
