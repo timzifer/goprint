@@ -21,7 +21,6 @@ import (
 	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
-	"github.com/timzifer/cera/pdfedit"
 	pdf "github.com/timzifer/fyne-pdf"
 
 	"github.com/timzifer/goprint"
@@ -783,7 +782,7 @@ func (d *printDialog) saveAsPDF() {
 		out, err := savedPDF(context.Background(), data, sizes, s)
 		fyne.Do(func() {
 			d.save.Enable()
-			if errors.Is(err, pdfedit.ErrEncrypted) {
+			if errors.Is(err, errEncrypted) {
 				d.status.SetText(d.t("save.encrypted"))
 				return
 			}

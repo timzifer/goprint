@@ -3,10 +3,11 @@ package fyneprint
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 
-	"github.com/timzifer/cera/pdfedit"
+	"github.com/timzifer/cera"
 
 	"github.com/timzifer/goprint"
 	"github.com/timzifer/goprint/internal/core"
@@ -30,6 +31,11 @@ func documentPDF(doc goprint.Document) ([]byte, error) {
 	return io.ReadAll(r)
 }
 
+// errEncrypted reports a document that cannot be saved as PDF: encrypted
+// with a password, with a security handler cera cannot read, or with
+// permissions that do not allow assembling it.
+var errEncrypted = errors.New("fyneprint: the file is encrypted and may not be reassembled")
+
 // pageSize is a page's visible size in points, /Rotate applied.
 type pageSize struct{ W, H float64 }
 
@@ -43,10 +49,10 @@ func savedPDF(ctx context.Context, data []byte, sizes []pageSize, s goprint.Sett
 	if len(pages) == 0 {
 		return nil, fmt.Errorf("%w: no pages selected", goprint.ErrInvalid)
 	}
-	sel := make([]pdfedit.Page, len(pages))
+	sel := make([]cera.EditPage, len(pages))
 	turned := false
 	for i, p := range pages {
-		sel[i] = pdfedit.Page{Index: p, Rotate: turnAngle(sizes[p], s.Orientation)}
+		sel[i] = cera.EditPage{Index: p, Rotate: turnAngle(sizes[p], s.Orientation)}
 		turned = turned || sel[i].Rotate != 0
 	}
 	if !turned && allPagesInOrder(pages, len(sizes)) {
@@ -55,9 +61,35 @@ func savedPDF(ctx context.Context, data []byte, sizes []pageSize, s goprint.Sett
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	var b bytes.Buffer
-	if err := pdfedit.Extract(&b, data, sel); err != nil {
+	b, err := extractPages(data, sel)
+	if err != nil {
 		return nil, fmt.Errorf("select pages: %w", err)
+	}
+	return b, nil
+}
+
+// extractPages returns a PDF with the pages sel of src, in that order, as
+// cera's editor imports them into a new document. An encrypted src that
+// may be reassembled is written decrypted; one that may not gives
+// errEncrypted.
+func extractPages(src []byte, sel []cera.EditPage) ([]byte, error) {
+	d, err := cera.Open(src)
+	if err != nil {
+		if errors.Is(err, cera.ErrPassword) || errors.Is(err, cera.ErrUnsupportedEncryption) {
+			return nil, fmt.Errorf("%w: %v", errEncrypted, err)
+		}
+		return nil, err
+	}
+	e := cera.NewEditor()
+	if err := e.ImportPages(0, d, sel...); err != nil {
+		if errors.Is(err, cera.ErrNoAssembly) {
+			return nil, errEncrypted
+		}
+		return nil, err
+	}
+	var b bytes.Buffer
+	if err := e.Save(&b); err != nil {
+		return nil, err
 	}
 	return b.Bytes(), nil
 }
